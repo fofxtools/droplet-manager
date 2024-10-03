@@ -1,0 +1,62 @@
+# Logs and Error Files
+error_log
+*.log
+/logs/
+
+# Composer Dependencies
+/vendor/
+
+# Environment and Configuration Files
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+config.php
+config.*.php
+*.config.php
+*.config.*.php
+
+# Local and Temporary Files
+/local/
+/temp*.php
+/out*.txt
+
+# IDE and Editor Files
+/.fleet
+/.idea
+/.vscode/
+/.zed
+
+# Cache Files
+/.php-cs-fixer.cache
+/.phpunit.result.cache
+/.phpunit.cache
+/.phpstan/cache/
+
+# Build Files
+/coverage/
+/node_modules/
+/public/build/
+/public/hot
+/public/storage
+/storage/*.key
+
+# NPM and Yarn logs
+npm-debug.log
+yarn-error.log
+
+# OS-Specific Files
+.DS_Store
+Thumbs.db
+
+# Additional Configuration Files
+.phpactor.json
+Homestead.json
+Homestead.yaml
+auth.json
+
+# Custom Output Files
+/repopack-output.txt
+/phpunit.txt
+/phpstan.txt

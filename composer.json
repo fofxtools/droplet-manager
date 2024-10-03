@@ -1,0 +1,52 @@
+{
+    "name": "fofx/droplet-manager",
+    "description": "For managing DigitalOcean droplets, CyberPanel accounts, and DNS records for GoDaddy and Namecheap.",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "FOfX\\DropletManager\\": "src/"
+        },
+        "files": [
+            "src/functions.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "FOfX\\DropletManager\\Tests\\": "tests/"
+        }
+    },
+    "authors": [
+        {
+            "name": "fofx",
+            "email": "177870764+fofxtools@users.noreply.github.com"
+        }
+    ],
+    "require": {
+        "toin0u/digitalocean-v2": "^4.9",
+        "guzzlehttp/guzzle": "^7.9",
+        "naturalbuild/namecheap-sdk": "^1.0",
+        "gellu/godaddy-api-client": "^1.1"
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.3",
+        "phpstan/phpstan": "^1.12",
+        "friendsofphp/php-cs-fixer": "^3.64"
+    },
+    "scripts": {
+        "phpstan": "vendor/bin/phpstan analyse",
+        "analyse": "@phpstan",
+        "analyze": "@phpstan",
+        "phpunit": "vendor/bin/phpunit --color=always",
+        "test": "@phpunit",
+        "tests": "@phpunit",
+        "cs-fix": "vendor/bin/php-cs-fixer fix",
+        "cs-check": "vendor/bin/php-cs-fixer fix --dry-run --diff",
+        "cs-list": "vendor/bin/php-cs-fixer list-files"
+    }
+}

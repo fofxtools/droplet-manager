@@ -1,0 +1,24 @@
+<?php
+
+return [
+    'digitalocean' => [
+        'token' => '',
+        'image_id' => 'litespeedtechnol-cyberpanel-20-04',
+    ],
+    'cyberpanel' => [
+        'server_ip' => '',
+        'root_password' => '',
+        'mysql_root_password' => '',
+        'port' => '8090',
+        'admin' => 'admin',
+        'password' => '',
+    ],
+    'namecheap' => [
+        'username' => '',
+        'token' => '',
+    ],
+    'godaddy' => [
+        'api_key' => '',
+        'api_secret' => '',
+    ],
+];
