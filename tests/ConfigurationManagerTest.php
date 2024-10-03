@@ -8,7 +8,7 @@ class ConfigurationManagerTest extends TestCase
     public function testConfigLoadsCorrectly()
     {
         $configManager = new ConfigurationManager();
-        $config = $configManager->getConfig();
+        $config        = $configManager->getConfig();
 
         $this->assertIsArray($config);
         $this->assertArrayHasKey('digitalocean', $config);

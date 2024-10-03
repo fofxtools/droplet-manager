@@ -8,7 +8,7 @@ class CyberPanelManagerTest extends TestCase
 {
     public function testCyberPanelManagerReceivesConfig()
     {
-        $configManager = new ConfigurationManager();
+        $configManager     = new ConfigurationManager();
         $cyberPanelManager = new CyberPanelManager($configManager);
 
         // You can also mock methods and further test behaviors

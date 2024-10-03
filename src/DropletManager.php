@@ -16,7 +16,7 @@ class DropletManager
     {
         // Example usage of $this->config for DigitalOcean settings
         $apiToken = $this->config['digitalocean']['token'];
-        $imageId = $this->config['digitalocean']['image_id'];
+        $imageId  = $this->config['digitalocean']['image_id'];
         // Proceed with creating the droplet using these config values
     }
 
