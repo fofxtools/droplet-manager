@@ -26,7 +26,8 @@
         "toin0u/digitalocean-v2": "^4.9",
         "guzzlehttp/guzzle": "^7.9",
         "naturalbuild/namecheap-sdk": "^1.0",
-        "gellu/godaddy-api-client": "^1.1"
+        "gellu/godaddy-api-client": "^1.1",
+        "phpseclib/phpseclib": "^3.0"
     },
     "config": {
         "allow-plugins": {

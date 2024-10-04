@@ -2,53 +2,139 @@
 
 namespace FOfX\DropletManager;
 
+use phpseclib3\Net\SSH2;
+
 /**
  * DropletManager class
  *
  * This class is responsible for managing DigitalOcean droplets, including creating
- * and deleting droplets, using configurations provided by the ConfigurationManager.
+ * and deleting droplets.
  */
 class DropletManager
 {
     private $config;
+    private $cyberApi;
+    private $dropletName;
+    private $sshConnection;
 
     /**
      * Constructor: Retrieve the configuration for DigitalOcean droplet management.
      *
-     * @param ConfigurationManager $configManager the configuration manager instance
+     * @param string|array|null $config      The path to the configuration file or a config array for testing
+     * @param ?string           $dropletName The name of the droplet to manage
      */
-    public function __construct(ConfigurationManager $configManager)
+    public function __construct(string|array|null $config = 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php', ?string $dropletName = null)
     {
-        // Retrieve the config array from the ConfigurationManager
-        $this->config = $configManager->getConfig();
+        if (is_array($config)) {
+            // Allow passing the configuration as an array (e.g., for testing purposes)
+            $this->config = $config;
+        } else {
+            // Load the configuration from a file
+            $configFilePath = resolve_config_file_path($config);
+            if (!$configFilePath) {
+                throw new \Exception('Configuration file not found.');
+            }
+            $this->config = load_config($configFilePath);
+        }
+
+        $this->dropletName = $dropletName;
     }
 
     /**
-     * Creates a new droplet in DigitalOcean.
+     * Set the name of the droplet to manage.
      *
-     * @param string $name   the name of the droplet
-     * @param string $region the region to create the droplet in
-     * @param string $size   the size of the droplet
-     *
-     * @return void
+     * @param string $dropletName The name of the droplet to manage
      */
-    public function createDroplet($name, $region, $size)
+    public function setDropletName(string $dropletName)
     {
-        // Example usage of $this->config for DigitalOcean settings
-        $apiToken = $this->config['digitalocean']['token'];
-        $imageId  = $this->config['digitalocean']['image_id'];
-        // Proceed with creating the droplet using these config values
+        $this->dropletName = $dropletName;
     }
 
     /**
-     * Deletes a droplet in DigitalOcean.
+     * Get the name of the droplet being managed.
      *
-     * @param int $dropletId the ID of the droplet to delete
-     *
-     * @return void
+     * @return string The name of the droplet being managed
      */
-    public function deleteDroplet($dropletId)
+    public function getDropletName(): string
     {
-        // Use the $this->config array here, if needed for API requests
+        return $this->dropletName;
+    }
+
+    /**
+     * Verifies an SSH connection to the droplet.
+     *
+     * This method establishes an SSH connection to the server using the droplet's
+     * configuration details (server IP and root password). It throws an exception
+     * if the login fails or if the droplet configuration is not found.
+     *
+     * @throws \Exception if the droplet configuration is missing or if SSH login fails
+     *
+     * @return bool returns true if the SSH connection is successfully established
+     */
+    public function verifyConnectionSsh()
+    {
+        if (!isset($this->config[$this->dropletName])) {
+            throw new \Exception("Configuration for droplet {$this->dropletName} not found.");
+        }
+
+        $serverIp     = $this->config[$this->dropletName]['server_ip'];
+        $rootPassword = $this->config[$this->dropletName]['root_password'];
+
+        // Use the existing SSH2 instance, or create one if it's not provided
+        $this->sshConnection = $this->sshConnection ?? new SSH2($serverIp);
+
+        if (!$this->sshConnection->login('root', $rootPassword)) {
+            throw new \Exception('Login failed.');
+        }
+
+        return true;
+    }
+
+    /**
+     * Verifies a connection to the droplet using the CyberPanel API.
+     *
+     * This method establishes a connection to the CyberPanel API using the server's
+     * configuration details (server IP, port, admin username, and password). It throws
+     * an exception if the droplet configuration is not found, or if the API connection fails.
+     *
+     * @throws \Exception if the droplet configuration is missing or if the API connection fails
+     *
+     * @return bool returns true if the API connection is successfully verified, false otherwise
+     */
+    public function verifyConnectionCyberApi()
+    {
+        try {
+            // Ensure droplet config exists
+            if (!isset($this->config[$this->dropletName])) {
+                throw new \Exception("Configuration for droplet {$this->dropletName} not found.");
+            }
+
+            $serverIp  = $this->config[$this->dropletName]['server_ip'];
+            $port      = $this->config[$this->dropletName]['port'];
+            $adminUser = $this->config[$this->dropletName]['admin'];
+            $adminPass = $this->config[$this->dropletName]['password'];
+
+            // Use the existing CyberApi instance, or create a new one if it's not provided
+            $this->cyberApi = $this->cyberApi ?? new CyberApi($serverIp, $port);
+
+            // Call verify_connection() with admin credentials
+            $response = $this->cyberApi->verify_connection([
+                'adminUser' => $adminUser,
+                'adminPass' => $adminPass,
+            ]);
+
+            // Check if the response is false or invalid
+            if (!$response || !$response['verifyConn']) {
+                echo 'Error at login.' . PHP_EOL;
+
+                return false;
+            }
+        } catch (\Exception $e) {
+            echo $e->getMessage() . PHP_EOL;
+
+            return false;
+        }
+
+        return true;
     }
 }

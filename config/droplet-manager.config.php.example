@@ -5,7 +5,15 @@ return [
         'token'    => '',
         'image_id' => 'litespeedtechnol-cyberpanel-20-04',
     ],
-    'cyberpanel' => [
+    'droplet-1' => [
+        'server_ip'           => '',
+        'root_password'       => '',
+        'mysql_root_password' => '',
+        'port'                => '8090',
+        'admin'               => 'admin',
+        'password'            => '',
+    ],
+    'droplet-2' => [
         'server_ip'           => '',
         'root_password'       => '',
         'mysql_root_password' => '',
