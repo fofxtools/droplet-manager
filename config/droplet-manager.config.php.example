@@ -2,23 +2,23 @@
 
 return [
     'digitalocean' => [
-        'token' => '',
+        'token'    => '',
         'image_id' => 'litespeedtechnol-cyberpanel-20-04',
     ],
     'cyberpanel' => [
-        'server_ip' => '',
-        'root_password' => '',
+        'server_ip'           => '',
+        'root_password'       => '',
         'mysql_root_password' => '',
-        'port' => '8090',
-        'admin' => 'admin',
-        'password' => '',
+        'port'                => '8090',
+        'admin'               => 'admin',
+        'password'            => '',
     ],
     'namecheap' => [
         'username' => '',
-        'token' => '',
+        'token'    => '',
     ],
     'godaddy' => [
-        'api_key' => '',
+        'api_key'    => '',
         'api_secret' => '',
     ],
 ];

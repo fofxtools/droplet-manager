@@ -5,6 +5,9 @@ use PHPUnit\Framework\TestCase;
 
 class ConfigurationManagerTest extends TestCase
 {
+    /**
+     * Test that the configuration is loaded correctly and contains expected keys.
+     */
     public function testConfigLoadsCorrectly()
     {
         $configManager = new ConfigurationManager();

@@ -5,7 +5,8 @@ namespace FOfX\DropletManager;
 /**
  * ConfigurationManager class
  *
- * This class is responsible for loading and providing access to the configuration.
+ * This class is responsible for loading and providing access to the configuration
+ * for managing DigitalOcean droplets, CyberPanel accounts, and DNS settings.
  */
 class ConfigurationManager
 {
@@ -14,7 +15,9 @@ class ConfigurationManager
     /**
      * Constructor: Load the configuration from the config file.
      *
-     * @throws \Exception if the configuration file cannot be found.
+     * This method loads the configuration file and stores it in the `$config` property.
+     *
+     * @throws \Exception if the configuration file cannot be found or loaded
      */
     public function __construct()
     {
@@ -30,7 +33,7 @@ class ConfigurationManager
     /**
      * Get the entire configuration array.
      *
-     * @return array The configuration data.
+     * @return array the configuration data loaded from the file
      */
     public function getConfig(): array
     {
@@ -40,9 +43,9 @@ class ConfigurationManager
     /**
      * Get a specific configuration value by key.
      *
-     * @param string $key The configuration key.
+     * @param string $key the configuration key to retrieve the value for
      *
-     * @return mixed|null The configuration value or null if the key is not found.
+     * @return mixed|null the configuration value or null if the key is not found
      */
     public function get(string $key)
     {

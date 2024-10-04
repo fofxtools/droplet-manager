@@ -6,6 +6,9 @@ use PHPUnit\Framework\TestCase;
 
 class CyberPanelManagerTest extends TestCase
 {
+    /**
+     * Test that the CyberPanelManager correctly receives the configuration data.
+     */
     public function testCyberPanelManagerReceivesConfig()
     {
         $configManager     = new ConfigurationManager();
