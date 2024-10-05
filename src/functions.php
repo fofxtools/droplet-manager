@@ -107,3 +107,25 @@ function is_phpunit_environment(bool $include_class_check = false, bool $skip_co
 
     return false;
 }
+
+/**
+ * Sleep for a specified duration in seconds using a float value.
+ *
+ * This function allows for fractional sleep durations by converting
+ * the specified seconds into microseconds and using usleep().
+ *
+ * @param float $seconds The number of seconds to sleep. Must be non-negative.
+ *
+ * @throws \InvalidArgumentException if $seconds is negative
+ *
+ * @return void
+ */
+function float_sleep(float $seconds): void
+{
+    if ($seconds < 0) {
+        throw new \InvalidArgumentException('The $seconds parameter must be non-negative.');
+    }
+
+    $microseconds = (int)ceil($seconds * 1000000);
+    usleep($microseconds);
+}

@@ -3,6 +3,7 @@
 namespace FOfX\DropletManager;
 
 use phpseclib3\Net\SSH2;
+use DigitalOceanV2\Client as DigitalOceanClient;
 
 /**
  * DropletManager class
@@ -16,14 +17,16 @@ class DropletManager
     private $cyberApi;
     private $dropletName;
     private $sshConnection;
+    private $digitalOceanClient;
 
     /**
      * Constructor: Retrieve the configuration for DigitalOcean droplet management.
      *
-     * @param string|array|null $config      The path to the configuration file or a config array for testing
-     * @param ?string           $dropletName The name of the droplet to manage
+     * @param string|array|null   $config             The path to the configuration file. Or a config array, for testing.
+     * @param ?string             $dropletName        The name of the droplet to manage.
+     * @param ?DigitalOceanClient $digitalOceanClient The DigitalOcean client to use for API calls.
      */
-    public function __construct(string|array|null $config = 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php', ?string $dropletName = null)
+    public function __construct(string|array|null $config = 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php', ?string $dropletName = null, ?DigitalOceanClient $digitalOceanClient = null)
     {
         if (is_array($config)) {
             // Allow passing the configuration as an array (e.g., for testing purposes)
@@ -38,12 +41,14 @@ class DropletManager
         }
 
         $this->dropletName = $dropletName;
+        // Optionally set the DigitalOcean client, allowing it to be injected for testing
+        $this->digitalOceanClient = $digitalOceanClient ?? new DigitalOceanClient();
     }
 
     /**
      * Set the name of the droplet to manage.
      *
-     * @param string $dropletName The name of the droplet to manage
+     * @param string $dropletName The name of the droplet to manage.
      */
     public function setDropletName(string $dropletName)
     {
@@ -53,7 +58,7 @@ class DropletManager
     /**
      * Get the name of the droplet being managed.
      *
-     * @return string The name of the droplet being managed
+     * @return string The name of the droplet being managed.
      */
     public function getDropletName(): string
     {
@@ -67,11 +72,11 @@ class DropletManager
      * configuration details (server IP and root password). It throws an exception
      * if the login fails or if the droplet configuration is not found.
      *
-     * @throws \Exception if the droplet configuration is missing or if SSH login fails
+     * @throws \Exception If the droplet configuration is missing or if SSH login fails.
      *
-     * @return bool returns true if the SSH connection is successfully established
+     * @return bool Returns true if the SSH connection is successfully established.
      */
-    public function verifyConnectionSsh()
+    public function verifyConnectionSsh(): bool
     {
         if (!isset($this->config[$this->dropletName])) {
             throw new \Exception("Configuration for droplet {$this->dropletName} not found.");
@@ -97,11 +102,11 @@ class DropletManager
      * configuration details (server IP, port, admin username, and password). It throws
      * an exception if the droplet configuration is not found, or if the API connection fails.
      *
-     * @throws \Exception if the droplet configuration is missing or if the API connection fails
+     * @throws \Exception If the droplet configuration is missing or if the API connection fails.
      *
-     * @return bool returns true if the API connection is successfully verified, false otherwise
+     * @return bool Returns true if the API connection is successfully verified, false otherwise.
      */
-    public function verifyConnectionCyberApi()
+    public function verifyConnectionCyberApi(): bool
     {
         try {
             // Ensure droplet config exists
@@ -136,5 +141,66 @@ class DropletManager
         }
 
         return true;
+    }
+
+    /**
+     * Creates a new droplet in DigitalOcean.
+     *
+     * This method authenticates the user with the DigitalOcean API, creates a new droplet
+     * with the specified name, region, and size, and monitors the droplet's status until
+     * it becomes active. The server's IP address is returned once the droplet is ready.
+     * If the creation process times out, a message is displayed.
+     *
+     * @param string $name          The name of the droplet to create.
+     * @param string $region        The region where the droplet will be created.
+     * @param string $size          The size of the droplet.
+     * @param float  $sleepDuration The duration to sleep between checks in seconds.
+     *
+     * @throws \Exception If the DigitalOcean configuration is missing or any error occurs.
+     *
+     * @return ?string Returns the droplet's IP address if created successfully, null otherwise.
+     */
+    public function createDroplet(string $name, string $region, string $size, float $sleepDuration = 5.0): ?string
+    {
+        // Ensure the DigitalOcean config exists
+        if (!isset($this->config['digitalocean'])) {
+            throw new \Exception('DigitalOcean configuration not found.');
+        }
+
+        // Track the start time with microsecond precision
+        $startTime = microtime(true);
+
+        // Authenticate the client
+        $this->digitalOceanClient->authenticate($this->config['digitalocean']['token']);
+
+        // Create a new droplet
+        $dropletApi     = $this->digitalOceanClient->droplet();
+        $createdDroplet = $dropletApi->create($name, $region, $size, $this->config['digitalocean']['image_id']);
+
+        echo "Droplet with ID: {$createdDroplet->id} created" . PHP_EOL;
+        echo 'Launching the server, please wait...';
+
+        // Poll the droplet's status until it's active
+        for ($i = 0; $i < 35; $i++) {
+            $dropletInfo = $dropletApi->getById($createdDroplet->id);
+            if ($dropletInfo->status === 'active') {
+                $duration = round(microtime(true) - $startTime, 2);
+                echo PHP_EOL . 'Server is ON!' . PHP_EOL;
+                echo "Droplet Name: {$dropletInfo->name}" . PHP_EOL;
+                echo 'The server IP is: ' . $dropletInfo->networks[0]->ipAddress . PHP_EOL;
+                echo "Droplet creation took {$duration} seconds." . PHP_EOL;
+
+                return $dropletInfo->networks[0]->ipAddress;
+            }
+            echo '...';
+            float_sleep($sleepDuration);
+        }
+
+        // If droplet creation timed out
+        $duration = round(microtime(true) - $startTime, 2);
+        echo PHP_EOL . 'Server creation timed out.' . PHP_EOL;
+        echo "Droplet creation attempted for {$duration} seconds." . PHP_EOL;
+
+        return null;
     }
 }

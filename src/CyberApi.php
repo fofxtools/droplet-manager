@@ -31,9 +31,9 @@ class CyberApi
      *
      * Since the server host name might not be set up or have propagated yet, we can use the IP:Port instead.
      *
-     * @param array  $params The parameters to pass to the API
-     * @param string $url    The URL to call
-     * @param bool   $useIP  Whether to use the IP:Port instead of serverhostname:serverport
+     * @param array  $params The parameters to pass to the API.
+     * @param string $url    The URL to call.
+     * @param bool   $useIP  Whether to use the IP:Port instead of serverhostname:serverport.
      *
      * @return string
      */
@@ -71,15 +71,15 @@ class CyberApi
     {
         $url        = 'createWebsite';
         $postParams = [
-                'adminUser'     => $params['adminUser'],
-                'adminPass'     => $params['adminPass'],
-                'domainName'    => $params['domainName'],
-                'websiteOwner'  => $params['websiteOwner'],
-                'ownerEmail'    => $params['ownerEmail'],
-                'ownerPassword' => $params['ownerPassword'],
-                'packageName'   => $params['packageName'],
-                'acl'           => 'user',
-            ];
+            'adminUser'     => $params['adminUser'],
+            'adminPass'     => $params['adminPass'],
+            'domainName'    => $params['domainName'],
+            'websiteOwner'  => $params['websiteOwner'],
+            'ownerEmail'    => $params['ownerEmail'],
+            'ownerPassword' => $params['ownerPassword'],
+            'packageName'   => $params['packageName'],
+            'acl'           => 'user',
+        ];
 
         $result = $this->call_cyberpanel($params, $url, $postParams);
 
@@ -90,11 +90,11 @@ class CyberApi
     {
         $url        = 'submitWebsiteStatus';
         $postParams = [
-                'adminUser'   => $params['adminUser'],
-                'adminPass'   => $params['adminPass'],
-                'websiteName' => $params['websiteName'],
-                'state'       => $params['state'],
-            ];
+            'adminUser'   => $params['adminUser'],
+            'adminPass'   => $params['adminPass'],
+            'websiteName' => $params['websiteName'],
+            'state'       => $params['state'],
+        ];
         $result = $this->call_cyberpanel($params, $url, $postParams);
 
         return $result;
@@ -105,9 +105,9 @@ class CyberApi
     {
         $url        = 'verifyConn';
         $postParams = [
-                'adminUser' => $params['adminUser'],
-                'adminPass' => $params['adminPass'],
-            ];
+            'adminUser' => $params['adminUser'],
+            'adminPass' => $params['adminPass'],
+        ];
         $result = $this->call_cyberpanel($params, $url, $postParams);
 
         return $result;
@@ -117,10 +117,10 @@ class CyberApi
     {
         $url        = 'deleteWebsite';
         $postParams = [
-                'adminUser'  => $params['adminUser'],
-                'adminPass'  => $params['adminPass'],
-                'domainName' => $params['domainName'],
-            ];
+            'adminUser'  => $params['adminUser'],
+            'adminPass'  => $params['adminPass'],
+            'domainName' => $params['domainName'],
+        ];
         $result = $this->call_cyberpanel($params, $url, $postParams);
 
         return $result;
@@ -130,11 +130,11 @@ class CyberApi
     {
         $url        = 'changeUserPassAPI';
         $postParams = [
-                'adminUser'     => $params['adminUser'],
-                'adminPass'     => $params['adminPass'],
-                'websiteOwner'  => $params['websiteOwner'],
-                'ownerPassword' => $params['ownerPassword'],
-            ];
+            'adminUser'     => $params['adminUser'],
+            'adminPass'     => $params['adminPass'],
+            'websiteOwner'  => $params['websiteOwner'],
+            'ownerPassword' => $params['ownerPassword'],
+        ];
         $result = $this->call_cyberpanel($params, $url, $postParams);
 
         return $result;
@@ -144,11 +144,11 @@ class CyberApi
     {
         $url        = 'changePackageAPI';
         $postParams = [
-                'adminUser'   => $params['adminUser'],
-                'adminPass'   => $params['adminPass'],
-                'websiteName' => $params['websiteName'],
-                'packageName' => $params['packageName'],
-            ];
+            'adminUser'   => $params['adminUser'],
+            'adminPass'   => $params['adminPass'],
+            'websiteName' => $params['websiteName'],
+            'packageName' => $params['packageName'],
+        ];
         $result = $this->call_cyberpanel($params, $url, $postParams);
 
         return $result;

@@ -6,6 +6,8 @@ use FOfX\DropletManager\DropletManager;
 use PHPUnit\Framework\TestCase;
 use phpseclib3\Net\SSH2;
 use FOfX\DropletManager\CyberApi;
+use DigitalOceanV2\Client as DigitalOceanClient;
+use DigitalOceanV2\Api\Droplet;
 
 /**
  * Unit tests for the DropletManager class.
@@ -14,14 +16,27 @@ class DropletManagerTest extends TestCase
 {
     private $dropletManager;
     private $mockConfig;
+    private $mockClient;
+    private $mockDropletApi;
 
     /**
      * Setup the DropletManager instance with a mock configuration before each test.
      */
     protected function setUp(): void
     {
-        // Mock configuration for a droplet
+        // Mock the DigitalOceanClient and Droplet API
+        $this->mockClient     = $this->createMock(DigitalOceanClient::class);
+        $this->mockDropletApi = $this->createMock(Droplet::class);
+
+        // Configure the mock client to return the mock Droplet API
+        $this->mockClient->method('droplet')->willReturn($this->mockDropletApi);
+
+        // Mock configuration for DigitalOcean and droplet-specific settings
         $this->mockConfig = [
+            'digitalocean' => [
+                'token'    => 'mock-token',
+                'image_id' => 'mock-image-id',
+            ],
             'test-droplet' => [
                 'server_ip'           => '127.0.0.1',
                 'root_password'       => 'root123',
@@ -32,8 +47,8 @@ class DropletManagerTest extends TestCase
             ],
         ];
 
-        // Create a DropletManager instance with the mock config
-        $this->dropletManager = new DropletManager($this->mockConfig, 'test-droplet');
+        // Create a DropletManager instance with the mocked client and configuration
+        $this->dropletManager = new DropletManager($this->mockConfig, 'test-droplet', $this->mockClient);
     }
 
     /**
@@ -173,5 +188,41 @@ class DropletManagerTest extends TestCase
 
         // Assert that verifyConnectionCyberApi() returns false
         $this->assertFalse($this->dropletManager->verifyConnectionCyberApi());
+    }
+
+    public function testCreateDropletSuccess()
+    {
+        // Simulate droplet creation and status polling
+        $createdDroplet = (object) ['id' => 12345];
+        $dropletInfo    = (object) [
+            'status'   => 'active',
+            'name'     => 'test-droplet',
+            'networks' => [(object) ['ipAddress' => '192.168.1.1']],
+        ];
+
+        $this->mockDropletApi->method('create')->willReturn($createdDroplet);
+        $this->mockDropletApi->method('getById')->willReturn($dropletInfo);
+
+        // Call createDroplet and expect the IP address to be returned
+        $ipAddress = $this->dropletManager->createDroplet('test-droplet', 'nyc3', 's-1vcpu-1gb');
+
+        // Check if the IP address is correct
+        $this->assertEquals('192.168.1.1', $ipAddress);
+    }
+
+    public function testCreateDropletTimeout()
+    {
+        // Simulate droplet creation and timeout (droplet never becomes active)
+        $createdDroplet = (object) ['id' => 12345];
+        $dropletInfo    = (object) ['status' => 'new'];  // Droplet status never becomes 'active'
+
+        $this->mockDropletApi->method('create')->willReturn($createdDroplet);
+        $this->mockDropletApi->method('getById')->willReturnOnConsecutiveCalls(...array_fill(0, 35, $dropletInfo));
+
+        // Call createDroplet with a very short sleep duration
+        $ipAddress = $this->dropletManager->createDroplet('test-droplet', 'nyc3', 's-1vcpu-1gb', 0.001);
+
+        // Expect null because of timeout
+        $this->assertNull($ipAddress);
     }
 }
