@@ -18,6 +18,7 @@ class DropletManager
     private $dropletName;
     private $sshConnection;
     private $digitalOceanClient;
+    private $cyberLinkConnection;
 
     /**
      * Constructor: Retrieve the configuration for DigitalOcean droplet management.
@@ -202,5 +203,24 @@ class DropletManager
         echo "Droplet creation attempted for {$duration} seconds." . PHP_EOL;
 
         return null;
+    }
+
+    /**
+     * Establishes a connection to the droplet using CyberLink.
+     * 
+     * This method either uses the injected CyberLink instance, the existing CyberLink connection,
+     * or creates a new one using the server IP and root password from the droplet's configuration.
+     *
+     * @param ?CyberLink $cyberLinkClient Optional injected CyberLink instance for testing.
+     * @return CyberLink Returns the CyberLink connection instance.
+     */
+    public function connectCyberLink(?CyberLink $cyberLinkClient = null): CyberLink
+    {
+        // If a CyberLink client is passed, prioritize that over the existing connection
+        return $cyberLinkClient ?? $this->cyberLinkConnection ?? $this->cyberLinkConnection = new CyberLink(
+            $this->config[$this->dropletName]['server_ip'],
+            'root',
+            $this->config[$this->dropletName]['root_password']
+        );
     }
 }

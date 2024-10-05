@@ -72,7 +72,7 @@ return $config->setFinder($finder)->setRules([
     'object_operator_without_whitespace' => true,
     // 'php_unit_fqcn_annotation' => true,
     'phpdoc_align'                  => ['align' => 'vertical'],
-    'phpdoc_annotation_without_dot' => true,
+    // 'phpdoc_annotation_without_dot' => true,
     'phpdoc_indent'                 => true,
     'phpdoc_inline_tag_normalizer'  => true,
     'phpdoc_no_access'              => true,

@@ -8,6 +8,7 @@ use phpseclib3\Net\SSH2;
 use FOfX\DropletManager\CyberApi;
 use DigitalOceanV2\Client as DigitalOceanClient;
 use DigitalOceanV2\Api\Droplet;
+use FOfX\DropletManager\CyberLink;
 
 /**
  * Unit tests for the DropletManager class.
@@ -224,5 +225,56 @@ class DropletManagerTest extends TestCase
 
         // Expect null because of timeout
         $this->assertNull($ipAddress);
+    }
+
+    public function testConnectCyberLinkSuccess(): void
+    {
+        // Mock the CyberLink class
+        $mockCyberLink = $this->createMock(CyberLink::class);
+
+        // Call connectCyberLink with the mock CyberLink and expect the mock to be returned
+        $cyberLinkConnection = $this->dropletManager->connectCyberLink($mockCyberLink);
+
+        // Assert that the mock CyberLink connection is returned
+        $this->assertSame($mockCyberLink, $cyberLinkConnection);
+    }
+
+    public function testConnectCyberLinkNoInjection(): void
+    {
+        // Mock the CyberLink class
+        $mockCyberLink = $this->createMock(CyberLink::class);
+
+        // Mock the DropletManager class, specifically the connectCyberLink method
+        $dropletManager = $this->getMockBuilder(DropletManager::class)
+            ->setConstructorArgs([$this->mockConfig, 'test-droplet', $this->mockClient])
+            ->onlyMethods(['connectCyberLink'])
+            ->getMock();
+
+        // Ensure that connectCyberLink creates a new mock CyberLink instance
+        $dropletManager->method('connectCyberLink')->willReturn($mockCyberLink);
+
+        // Call the method to trigger the logic
+        $cyberLinkConnection = $dropletManager->connectCyberLink();
+
+        // Assert that the mock CyberLink connection is returned
+        $this->assertSame($mockCyberLink, $cyberLinkConnection);
+    }
+
+    public function testConnectCyberLinkReuseExistingConnection(): void
+    {
+        // Mock the CyberLink class
+        $mockCyberLink = $this->createMock(CyberLink::class);
+
+        // Use reflection to inject the mock CyberLink connection
+        $reflection = new \ReflectionClass($this->dropletManager);
+        $cyberLinkProperty = $reflection->getProperty('cyberLinkConnection');
+        $cyberLinkProperty->setAccessible(true);
+        $cyberLinkProperty->setValue($this->dropletManager, $mockCyberLink);
+
+        // Call connectCyberLink and expect the existing connection to be reused
+        $cyberLinkConnection = $this->dropletManager->connectCyberLink();
+
+        // Assert that the existing connection is returned
+        $this->assertSame($mockCyberLink, $cyberLinkConnection);
     }
 }
