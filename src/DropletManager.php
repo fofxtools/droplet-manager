@@ -24,11 +24,11 @@ class DropletManager
     /**
      * Constructor: Retrieve the configuration for DigitalOcean droplet management.
      *
-     * @param string|array|null   $config             The path to the configuration file. Or a config array, for testing.
      * @param ?string             $dropletName        The name of the droplet to manage.
+     * @param string|array|null   $config             The path to the configuration file. Or a config array, for testing.
      * @param ?DigitalOceanClient $digitalOceanClient The DigitalOcean client to use for API calls.
      */
-    public function __construct(string|array|null $config = 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php', ?string $dropletName = null, ?DigitalOceanClient $digitalOceanClient = null)
+    public function __construct(?string $dropletName = null, string|array|null $config = 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php', ?DigitalOceanClient $digitalOceanClient = null)
     {
         if (is_array($config)) {
             // Allow passing the configuration as an array (e.g., for testing purposes)
@@ -301,8 +301,8 @@ class DropletManager
         if ($configured) {
             echo "Domain $domainName already registered on the DigitalOcean DNS. Updating..." . PHP_EOL;
 
-            $domainRecords = $domainRecordClient->getAll($domainName);
-            $totalARecords = 0;
+            $domainRecords     = $domainRecordClient->getAll($domainName);
+            $totalARecords     = 0;
             $totalCnameRecords = 0;
 
             foreach ($domainRecords as $record) {

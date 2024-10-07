@@ -50,7 +50,7 @@ class DropletManagerTest extends TestCase
         ];
 
         // Create a DropletManager instance with the mocked client and configuration
-        $this->dropletManager = new DropletManager($this->mockConfig, 'test-droplet', $this->mockClient);
+        $this->dropletManager = new DropletManager('test-droplet', $this->mockConfig, $this->mockClient);
     }
 
     /**
@@ -280,7 +280,7 @@ class DropletManagerTest extends TestCase
 
         // Mock the DropletManager class, specifically the connectCyberLink method
         $dropletManager = $this->getMockBuilder(DropletManager::class)
-            ->setConstructorArgs([$this->mockConfig, 'test-droplet', $this->mockClient])
+            ->setConstructorArgs(['test-droplet', $this->mockConfig, $this->mockClient])
             ->onlyMethods(['connectCyberLink'])
             ->getMock();
 
