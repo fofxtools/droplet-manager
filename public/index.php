@@ -8,8 +8,6 @@ $dropletManager = new DropletManager('config' . DIRECTORY_SEPARATOR . 'droplet-m
 
 //print_r($dropletManager->getWebsites());
 
-//var_dump($dropletManager->digitalOceanClient);
-//$dropletManager->digitalOceanClient->authenticate($dropletManager->config['digitalocean']['token']);
-//var_dump($dropletManager->digitalOceanClient);
-
-$dropletManager->configureDns('iffduruguay.org', '137.184.202.167');
+$domain = 'iffduruguay.org';
+$ip = '137.184.202.167';
+$dropletManager->configureDns($domain, $ip);

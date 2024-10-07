@@ -256,6 +256,7 @@ class DropletManager
 
         try {
             $this->digitalOceanClient->domain()->getByName($domainName);
+
             return true;
         } catch (\DigitalOceanV2\Exception\ResourceNotFoundException $e) {
             return false;
@@ -264,7 +265,7 @@ class DropletManager
 
     /**
      * Get the websites hosted on the droplet.
-     * 
+     *
      * This method connects to the droplet using CyberLink and retrieves the list of websites hosted on the droplet.
      *
      * @return array An array of website information.
@@ -274,14 +275,78 @@ class DropletManager
         return $this->connectCyberLink()->listWebsites();
     }
 
-    public function configureDns(string $domainName, string $serverIp)
+    /**
+     * Configure the DNS for a domain.
+     *
+     * This method authenticates the DigitalOcean client and attempts to configure
+     * the DNS for the specified domain. It checks if the domain is already configured
+     * and updates the DNS records accordingly.
+     *
+     * @param string $domainName The name of the domain to configure.
+     * @param string $serverIp   The IP address of the server.
+     *
+     * @return void
+     */
+    public function configureDns(string $domainName, string $serverIp): void
     {
         // Authenticate the client if not already authenticated
         $this->authenticateDigitalOcean();
 
-        $domainClient = $this->digitalOceanClient->domain();
+        $domainClient       = $this->digitalOceanClient->domain();
         $domainRecordClient = $this->digitalOceanClient->domainRecord();
 
         $configured = $this->isDomainConfigured($domainName);
+
+        // If the domain is already configured, update it
+        if ($configured) {
+            echo "Domain $domainName already registered on the DigitalOcean DNS. Updating..." . PHP_EOL;
+
+            $domainRecords = $domainRecordClient->getAll($domainName);
+            $totalARecords = 0;
+            $totalCnameRecords = 0;
+
+            foreach ($domainRecords as $record) {
+                if ($record->type === 'A' && $record->name === '@') {
+                    $totalARecords++;
+                    echo 'Old value: A Record: ' . $record->data . PHP_EOL;
+
+                    if ($record->data !== $serverIp) {
+                        echo 'Updating IP...';
+                        $domainRecordClient->update($domainName, $record->id, '@', $serverIp);
+                        echo 'A Record IP updated to: ' . $serverIp . PHP_EOL;
+                    } else {
+                        echo 'The IP was already set. No need to update.' . PHP_EOL;
+                    }
+                } elseif ($record->type === 'CNAME' && $record->name === 'www') {
+                    $totalCnameRecords++;
+                    echo 'Old value: CNAME Record: ' . $record->data . PHP_EOL;
+
+                    if ($record->data !== '@') {
+                        $domainRecordClient->update($domainName, $record->id, 'www', '@');
+                        echo 'CNAME record for "www" updated to point to: @' . PHP_EOL;
+                    } else {
+                        echo 'The CNAME record was already set. No need to update.' . PHP_EOL;
+                    }
+                }
+            }
+
+            // If no A record is found, create one
+            if (!$totalARecords) {
+                $domainRecordClient->create($domainName, 'A', '@', $serverIp);
+                echo 'A Record was not found. Created!' . PHP_EOL;
+            }
+
+            // If no CNAME record is found, create one
+            if (!$totalCnameRecords) {
+                $domainRecordClient->create($domainName, 'CNAME', 'www', '@');
+                echo 'CNAME Record was not found. Created!' . PHP_EOL;
+            }
+        } else {
+            // If the domain was not configured, create it
+            $domainClient->create($domainName);
+            $domainRecordClient->create($domainName, 'A', '@', $serverIp);
+            $domainRecordClient->create($domainName, 'CNAME', 'www', '@');
+            echo "Domain $domainName was not found. Created!" . PHP_EOL;
+        }
     }
 }

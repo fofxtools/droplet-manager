@@ -213,7 +213,7 @@ class DropletManagerTest extends TestCase
     {
         // Use reflection to set the private property digitalOceanClientIsAuthenticated to true
         $reflection = new \ReflectionClass($this->dropletManager);
-        $property = $reflection->getProperty('digitalOceanClientIsAuthenticated');
+        $property   = $reflection->getProperty('digitalOceanClientIsAuthenticated');
         $property->setAccessible(true);
         $property->setValue($this->dropletManager, true);
 
@@ -369,7 +369,7 @@ class DropletManagerTest extends TestCase
         // Mock the listWebsites() method to return a sample array of websites
         $mockCyberLink->method('listWebsites')->willReturn([
             ['domain' => 'example.com', 'status' => 'active'],
-            ['domain' => 'test.com', 'status' => 'inactive']
+            ['domain' => 'test.com', 'status' => 'inactive'],
         ]);
 
         // Create a mock of DropletManager and mock the connectCyberLink method to return the CyberLink mock
