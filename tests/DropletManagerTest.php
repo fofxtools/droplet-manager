@@ -10,6 +10,8 @@ use DigitalOceanV2\Client as DigitalOceanClient;
 use DigitalOceanV2\Api\Droplet;
 use DigitalOceanV2\Exception\ResourceNotFoundException;
 use FOfX\DropletManager\CyberLink;
+use Monolog\Logger;
+use Monolog\Handler\NullHandler;
 
 /**
  * Unit tests for the DropletManager class.
@@ -49,8 +51,12 @@ class DropletManagerTest extends TestCase
             ],
         ];
 
+        // Create a Logger with a NullHandler for testing
+        $logger = new Logger('test');
+        $logger->pushHandler(new NullHandler());
+
         // Create a DropletManager instance with the mocked client and configuration
-        $this->dropletManager = new DropletManager('test-droplet', $this->mockConfig, $this->mockClient);
+        $this->dropletManager = new DropletManager('test-droplet', $this->mockConfig, $this->mockClient, $logger);
     }
 
     /**

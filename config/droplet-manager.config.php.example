@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'logging' => [
+        'path'  => 'php://stdout',
+        'level' => \Monolog\Level::Info,
+    ],
     'digitalocean' => [
         'token'    => '',
         'image_id' => 'litespeedtechnol-cyberpanel-20-04',

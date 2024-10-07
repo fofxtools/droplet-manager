@@ -10,4 +10,4 @@ $dropletManager = new DropletManager('test', 'config' . DIRECTORY_SEPARATOR . 'd
 
 $domain = 'iffduruguay.org';
 $ip     = '137.184.202.167';
-$dropletManager->configureDns($domain, $ip);
+//$dropletManager->configureDns($domain, $ip);
