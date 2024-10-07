@@ -8,6 +8,7 @@ use phpseclib3\Net\SSH2;
 use FOfX\DropletManager\CyberApi;
 use DigitalOceanV2\Client as DigitalOceanClient;
 use DigitalOceanV2\Api\Droplet;
+use DigitalOceanV2\Exception\ResourceNotFoundException;
 use FOfX\DropletManager\CyberLink;
 
 /**
@@ -191,6 +192,39 @@ class DropletManagerTest extends TestCase
         $this->assertFalse($this->dropletManager->verifyConnectionCyberApi());
     }
 
+    /**
+     * Test that authenticate() is called on the DigitalOcean client when not already authenticated.
+     */
+    public function testAuthenticateDigitalOceanCallsAuthenticateWhenNotAuthenticated()
+    {
+        // Expect authenticate to be called once with the provided token
+        $this->mockClient->expects($this->once())
+            ->method('authenticate')
+            ->with($this->mockConfig['digitalocean']['token']);
+
+        // Call the method under test
+        $this->dropletManager->authenticateDigitalOcean();
+    }
+
+    /**
+     * Test that authenticate() is not called on the DigitalOcean client if already authenticated.
+     */
+    public function testAuthenticateDigitalOceanDoesNotCallAuthenticateWhenAlreadyAuthenticated()
+    {
+        // Use reflection to set the private property digitalOceanClientIsAuthenticated to true
+        $reflection = new \ReflectionClass($this->dropletManager);
+        $property = $reflection->getProperty('digitalOceanClientIsAuthenticated');
+        $property->setAccessible(true);
+        $property->setValue($this->dropletManager, true);
+
+        // Expect authenticate to not be called at all
+        $this->mockClient->expects($this->never())
+            ->method('authenticate');
+
+        // Call the method under test
+        $this->dropletManager->authenticateDigitalOcean();
+    }
+
     public function testCreateDropletSuccess()
     {
         // Simulate droplet creation and status polling
@@ -266,7 +300,7 @@ class DropletManagerTest extends TestCase
         $mockCyberLink = $this->createMock(CyberLink::class);
 
         // Use reflection to inject the mock CyberLink connection
-        $reflection = new \ReflectionClass($this->dropletManager);
+        $reflection        = new \ReflectionClass($this->dropletManager);
         $cyberLinkProperty = $reflection->getProperty('cyberLinkConnection');
         $cyberLinkProperty->setAccessible(true);
         $cyberLinkProperty->setValue($this->dropletManager, $mockCyberLink);
@@ -276,5 +310,132 @@ class DropletManagerTest extends TestCase
 
         // Assert that the existing connection is returned
         $this->assertSame($mockCyberLink, $cyberLinkConnection);
+    }
+
+    /**
+     * Test that isDomainConfigured() returns true when the domain exists.
+     */
+    public function testIsDomainConfiguredReturnsTrueWhenDomainExists()
+    {
+        // Mock the domain method and configure it to return a mock response
+        $mockDomain = $this->createMock(\DigitalOceanV2\Api\Domain::class);
+
+        // Mock the getByName method to return a mock response
+        $mockDomain->method('getByName')
+            ->with('example.com')
+            ->willReturn((object) ['name' => 'example.com']);
+
+        // Configure the DigitalOceanClient to return the mock Domain object
+        $this->mockClient->method('domain')->willReturn($mockDomain);
+
+        // Expect getByName to be called once
+        $mockDomain->expects($this->once())->method('getByName')->with('example.com');
+
+        // Assert that the method returns true
+        $this->assertTrue($this->dropletManager->isDomainConfigured('example.com'));
+    }
+
+    /**
+     * Test that isDomainConfigured() returns false when the domain does not exist.
+     */
+    public function testIsDomainConfiguredReturnsFalseWhenDomainDoesNotExist()
+    {
+        // Mock the domain method and configure it to throw a ResourceNotFoundException
+        $mockDomain = $this->createMock(\DigitalOceanV2\Api\Domain::class);
+
+        // Mock the getByName method to throw a ResourceNotFoundException
+        $mockDomain->method('getByName')
+            ->with('nonexistent.com')
+            ->willThrowException(new ResourceNotFoundException());
+
+        // Configure the DigitalOceanClient to return the mock Domain object
+        $this->mockClient->method('domain')->willReturn($mockDomain);
+
+        // Expect getByName to be called once
+        $mockDomain->expects($this->once())->method('getByName')->with('nonexistent.com');
+
+        // Assert that the method returns false
+        $this->assertFalse($this->dropletManager->isDomainConfigured('nonexistent.com'));
+    }
+
+    /**
+     * Test getWebsites returns an array of websites.
+     */
+    public function testGetWebsitesReturnsArray()
+    {
+        // Create a mock of CyberLink
+        $mockCyberLink = $this->createMock(CyberLink::class);
+
+        // Mock the listWebsites() method to return a sample array of websites
+        $mockCyberLink->method('listWebsites')->willReturn([
+            ['domain' => 'example.com', 'status' => 'active'],
+            ['domain' => 'test.com', 'status' => 'inactive']
+        ]);
+
+        // Create a mock of DropletManager and mock the connectCyberLink method to return the CyberLink mock
+        $dropletManager = $this->getMockBuilder(DropletManager::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['connectCyberLink'])
+            ->getMock();
+
+        $dropletManager->method('connectCyberLink')->willReturn($mockCyberLink);
+
+        // Call getWebsites and check that the result is as expected
+        $result = $dropletManager->getWebsites();
+
+        $this->assertIsArray($result);
+        $this->assertCount(2, $result);
+        $this->assertEquals('example.com', $result[0]['domain']);
+        $this->assertEquals('active', $result[0]['status']);
+    }
+
+    /**
+     * Test getWebsites handles empty array.
+     */
+    public function testGetWebsitesHandlesEmptyArray()
+    {
+        // Create a mock of CyberLink
+        $mockCyberLink = $this->createMock(CyberLink::class);
+
+        // Mock the listWebsites() method to return an empty array
+        $mockCyberLink->method('listWebsites')->willReturn([]);
+
+        // Create a mock of DropletManager and mock the connectCyberLink method to return the CyberLink mock
+        $dropletManager = $this->getMockBuilder(DropletManager::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['connectCyberLink'])
+            ->getMock();
+
+        $dropletManager->method('connectCyberLink')->willReturn($mockCyberLink);
+
+        // Call getWebsites and check that the result is an empty array
+        $result = $dropletManager->getWebsites();
+
+        $this->assertIsArray($result);
+        $this->assertEmpty($result);
+    }
+
+    /**
+     * Test getWebsites handles exceptions.
+     */
+    public function testGetWebsitesHandlesException()
+    {
+        // Create a mock of CyberLink
+        $mockCyberLink = $this->createMock(CyberLink::class);
+
+        // Mock the listWebsites() method to throw an exception
+        $mockCyberLink->method('listWebsites')->willThrowException(new \Exception('Connection failed'));
+
+        // Create a mock of DropletManager and mock the connectCyberLink method to return the CyberLink mock
+        $dropletManager = $this->getMockBuilder(DropletManager::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['connectCyberLink'])
+            ->getMock();
+
+        $dropletManager->method('connectCyberLink')->willReturn($mockCyberLink);
+
+        // Call getWebsites and check that an exception is thrown and handled
+        $this->expectException(\Exception::class);
+        $dropletManager->getWebsites();
     }
 }

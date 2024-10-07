@@ -18,6 +18,7 @@ class DropletManager
     private $dropletName;
     private $sshConnection;
     private $digitalOceanClient;
+    private $digitalOceanClientIsAuthenticated = false;
     private $cyberLinkConnection;
 
     /**
@@ -145,6 +146,22 @@ class DropletManager
     }
 
     /**
+     * Authenticates the DigitalOcean client, if not already authenticated.
+     *
+     * This method authenticates the DigitalOcean client using the provided token.
+     * It sets the client as authenticated and allows for subsequent API calls.
+     *
+     * @return void
+     */
+    public function authenticateDigitalOcean(): void
+    {
+        if (!$this->digitalOceanClientIsAuthenticated) {
+            $this->digitalOceanClient->authenticate($this->config['digitalocean']['token']);
+            $this->digitalOceanClientIsAuthenticated = true;
+        }
+    }
+
+    /**
      * Creates a new droplet in DigitalOcean.
      *
      * This method authenticates the user with the DigitalOcean API, creates a new droplet
@@ -163,16 +180,11 @@ class DropletManager
      */
     public function createDroplet(string $name, string $region, string $size, float $sleepDuration = 5.0): ?string
     {
-        // Ensure the DigitalOcean config exists
-        if (!isset($this->config['digitalocean'])) {
-            throw new \Exception('DigitalOcean configuration not found.');
-        }
-
         // Track the start time with microsecond precision
         $startTime = microtime(true);
 
-        // Authenticate the client
-        $this->digitalOceanClient->authenticate($this->config['digitalocean']['token']);
+        // Authenticate the client if not already authenticated
+        $this->authenticateDigitalOcean();
 
         // Create a new droplet
         $dropletApi     = $this->digitalOceanClient->droplet();
@@ -207,20 +219,69 @@ class DropletManager
 
     /**
      * Establishes a connection to the droplet using CyberLink.
-     * 
+     *
      * This method either uses the injected CyberLink instance, the existing CyberLink connection,
      * or creates a new one using the server IP and root password from the droplet's configuration.
      *
      * @param ?CyberLink $cyberLinkClient Optional injected CyberLink instance for testing.
+     *
      * @return CyberLink Returns the CyberLink connection instance.
      */
     public function connectCyberLink(?CyberLink $cyberLinkClient = null): CyberLink
     {
         // If a CyberLink client is passed, prioritize that over the existing connection
+        // Else if an existing connection is set, use that
+        // Else create a new connection
         return $cyberLinkClient ?? $this->cyberLinkConnection ?? $this->cyberLinkConnection = new CyberLink(
             $this->config[$this->dropletName]['server_ip'],
             'root',
             $this->config[$this->dropletName]['root_password']
         );
+    }
+
+    /**
+     * Checks if a domain is configured on DigitalOcean.
+     *
+     * This method authenticates the DigitalOcean client and attempts to retrieve
+     * the domain information by name. If the domain is not found, it returns false.
+     *
+     * @param string $domainName The name of the domain to check.
+     *
+     * @return bool Returns true if the domain is configured, false otherwise.
+     */
+    public function isDomainConfigured(string $domainName): bool
+    {
+        // Authenticate the client if not already authenticated
+        $this->authenticateDigitalOcean();
+
+        try {
+            $this->digitalOceanClient->domain()->getByName($domainName);
+            return true;
+        } catch (\DigitalOceanV2\Exception\ResourceNotFoundException $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get the websites hosted on the droplet.
+     * 
+     * This method connects to the droplet using CyberLink and retrieves the list of websites hosted on the droplet.
+     *
+     * @return array An array of website information.
+     */
+    public function getWebsites(): array
+    {
+        return $this->connectCyberLink()->listWebsites();
+    }
+
+    public function configureDns(string $domainName, string $serverIp)
+    {
+        // Authenticate the client if not already authenticated
+        $this->authenticateDigitalOcean();
+
+        $domainClient = $this->digitalOceanClient->domain();
+        $domainRecordClient = $this->digitalOceanClient->domainRecord();
+
+        $configured = $this->isDomainConfigured($domainName);
     }
 }
