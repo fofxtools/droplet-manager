@@ -19,7 +19,8 @@ class DropletManager
     private $config;
     private $cyberApi;
     private $dropletName;
-    private $sshConnection;
+    private $sshConnection    = null;
+    private $sshAuthenticated = false;
     private $digitalOceanClient;
     private $digitalOceanClientIsAuthenticated = false;
     private $cyberLinkConnection;
@@ -88,18 +89,33 @@ class DropletManager
     }
 
     /**
-     * Verifies an SSH connection to the droplet.
+     * Set the SSH connection (mainly for testing purposes).
      *
-     * This method establishes an SSH connection to the server using the droplet's
+     * @param SSH2 $sshConnection
+     */
+    public function setSshConnection(SSH2 $sshConnection)
+    {
+        $this->sshConnection = $sshConnection;
+    }
+
+    /**
+     * Verifies or establishes an SSH connection to the droplet.
+     *
+     * This method checks if an SSH connection is already authenticated. If not, it
+     * establishes a new SSH connection to the server using the droplet's
      * configuration details (server IP and root password). It throws an exception
      * if the login fails or if the droplet configuration is not found.
      *
      * @throws \Exception If the droplet configuration is missing or if SSH login fails.
      *
-     * @return bool Returns true if the SSH connection is successfully established.
+     * @return bool Returns true if the SSH connection is already authenticated or successfully established.
      */
     public function verifyConnectionSsh(): bool
     {
+        if ($this->sshAuthenticated) {
+            return true;
+        }
+
         if (!isset($this->config[$this->dropletName])) {
             throw new \Exception("Configuration for droplet {$this->dropletName} not found.");
         }
@@ -107,12 +123,15 @@ class DropletManager
         $serverIp     = $this->config[$this->dropletName]['server_ip'];
         $rootPassword = $this->config[$this->dropletName]['root_password'];
 
-        // Use the existing SSH2 instance, or create one if it's not provided
-        $this->sshConnection = $this->sshConnection ?? new SSH2($serverIp);
+        if (!$this->sshConnection) {
+            $this->sshConnection = new SSH2($serverIp);
+        }
 
         if (!$this->sshConnection->login('root', $rootPassword)) {
             throw new \Exception('Login failed.');
         }
+
+        $this->sshAuthenticated = true;
 
         return true;
     }
@@ -459,20 +478,14 @@ class DropletManager
      *
      * @param string $domain The domain name to look up the Linux user for.
      *
-     * @throws \Exception if SSH connection or command execution fails.
+     * @throws \Exception If SSH connection or command execution fails.
      *
      * @return string|bool The Linux username if found, false otherwise.
      */
     public function getLinuxUserForDomain(string $domain): string|bool
     {
-        // Initialize SSH connection if not already done
-        if (!$this->sshConnection) {
-            $this->sshConnection = new SSH2($this->config[$this->dropletName]['server_ip']);
-        }
-
-        if (!$this->sshConnection->login('root', $this->config[$this->dropletName]['root_password'])) {
-            throw new \Exception('SSH login failed for user root');
-        }
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
 
         // Execute the stat command to get the user owner of the directory
         $command  = sprintf('stat -c "%%U" /home/%s', escapeshellarg($domain));
@@ -489,5 +502,57 @@ class DropletManager
         $this->logger->info("Retrieved Linux user for domain {$domain}: {$username}");
 
         return $username;
+    }
+
+    /**
+     * Create or update the .htaccess file to enforce HTTPS redirection for a given domain.
+     *
+     * This method uses an SSH connection to the droplet and creates or modifies
+     * the .htaccess file in the domain's public_html directory to redirect HTTP traffic to HTTPS.
+     *
+     * @param string $domainName The domain name for which HTTPS redirection should be configured.
+     *
+     * @return bool True if the file was created and configured successfully, false on failure.
+     */
+    public function createHtaccessForHttpsRedirect(string $domainName): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        // Define the .htaccess content for HTTPS redirection
+        $htaccessContent = <<<EOF
+RewriteEngine On
+RewriteCond %{HTTPS}  !=on
+RewriteRule ^/?(.*) https://%{SERVER_NAME}/\$1 [R,L]
+EOF;
+
+        // Securely add the .htaccess content to the file on the server
+        $escapedDomain = escapeshellarg($domainName);
+        $command       = sprintf(
+            'cat <<EOF > /home/%s/public_html/.htaccess
+%s
+EOF',
+            $escapedDomain,
+            $htaccessContent
+        );
+        $this->sshConnection->exec($command);
+
+        // Retrieve the Linux user for the domain
+        $username = $this->getLinuxUserForDomain($domainName);
+
+        // Check if user retrieval was successful
+        if ($username === false) {
+            $this->logger->error("Failed to set ownership for .htaccess due to missing Linux user for domain: {$domainName}");
+
+            return false;
+        }
+
+        // Set the correct ownership for the .htaccess file to the domain owner
+        $ownershipCommand = sprintf('chown %s:%s /home/%s/public_html/.htaccess', escapeshellarg($username), escapeshellarg($username), $escapedDomain);
+        $this->sshConnection->exec($ownershipCommand);
+
+        $this->logger->info("HTTPS redirection configured for domain {$domainName} via .htaccess");
+
+        return true;
     }
 }
