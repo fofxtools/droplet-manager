@@ -22,6 +22,8 @@ class DropletManagerTest extends TestCase
     private $mockConfig;
     private $mockClient;
     private $mockDropletApi;
+    private $cyberApiMock;
+    private $dropletManagerWithCyberApi;
 
     /**
      * Setup the DropletManager instance with a mock configuration before each test.
@@ -37,6 +39,10 @@ class DropletManagerTest extends TestCase
 
         // Mock configuration for DigitalOcean and droplet-specific settings
         $this->mockConfig = [
+            'logging' => [
+                'path'  => 'php://stdout',
+                'level' => \Monolog\Level::Info,
+            ],
             'digitalocean' => [
                 'token'    => 'mock-token',
                 'image_id' => 'mock-image-id',
@@ -55,8 +61,26 @@ class DropletManagerTest extends TestCase
         $logger = new Logger('test');
         $logger->pushHandler(new NullHandler());
 
+        // Mock the CyberApi dependency
+        $this->cyberApiMock = $this->createMock(CyberApi::class);
+
         // Create a DropletManager instance with the mocked client and configuration
         $this->dropletManager = new DropletManager('test-droplet', $this->mockConfig, $this->mockClient, $logger);
+    }
+
+    /**
+     * Custom setup method for CyberPanel tests
+     */
+    private function setUpWithCyberApi()
+    {
+        // Clone the main DropletManager instance to avoid impacting other tests
+        $this->dropletManagerWithCyberApi = clone $this->dropletManager;
+
+        // Use reflection to inject the mock CyberApi instance into the cloned DropletManager
+        $reflection = new \ReflectionClass($this->dropletManagerWithCyberApi);
+        $cyberApiProperty = $reflection->getProperty('cyberApi');
+        $cyberApiProperty->setAccessible(true);
+        $cyberApiProperty->setValue($this->dropletManagerWithCyberApi, $this->cyberApiMock);
     }
 
     /**
@@ -443,5 +467,71 @@ class DropletManagerTest extends TestCase
         // Call getWebsites and check that an exception is thrown and handled
         $this->expectException(\Exception::class);
         $dropletManager->getWebsites();
+    }
+
+    public function testCreateWebsiteCyberApiSuccess()
+    {
+        $this->setUpWithCyberApi();
+
+        $data = [
+            'firstName' => 'John',
+            'lastName' => 'Doe',
+            'email' => 'johndoe@email.com',
+            'username' => 'john',
+            'password' => 'password',
+            'domainName' => 'example.com',
+            'websiteEmail' => 'admin@example.com'
+        ];
+
+        // Sample response from CyberApi::create_new_account
+        $response = [
+            "status" => 1,
+            "createWebSiteStatus" => 1,
+            "error_message" => "None",
+            "tempStatusPath" => "/home/cyberpanel/4563",
+            "LinuxUser" => "examp1239"
+        ];
+
+        // Configure the CyberApi mock to return a successful response
+        $this->cyberApiMock->expects($this->once())
+            ->method('create_new_account')
+            ->willReturn($response);
+
+        // Test the method on the cloned instance with the CyberApi mock
+        $result = $this->dropletManagerWithCyberApi->createWebsiteCyberApi($data);
+        $this->assertIsArray($result);
+        $this->assertSame($response, $result);
+    }
+
+    public function testCreateWebsiteCyberApiFailure()
+    {
+        $this->setUpWithCyberApi();
+
+        $data = [
+            'firstName' => 'John',
+            'lastName' => 'Doe',
+            'email' => 'johndoe@email.com',
+            'username' => 'john',
+            'password' => 'password',
+            'domainName' => 'example.com',
+            'websiteEmail' => 'admin@example.com'
+        ];
+
+        $response = [
+            "status" => 0,
+            "createWebSiteStatus" => 0,
+            "error_message" => "Failed to create website",
+            "tempStatusPath" => "",
+            "LinuxUser" => ""
+        ];
+
+        // Mock the CyberApi::create_new_account method
+        $this->cyberApiMock->expects($this->once())
+            ->method('create_new_account')
+            ->willReturn($response);
+
+        // Test the failure case on the cloned instance
+        $result = $this->dropletManagerWithCyberApi->createWebsiteCyberApi($data);
+        $this->assertFalse($result);
     }
 }

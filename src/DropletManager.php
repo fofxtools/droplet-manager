@@ -33,8 +33,12 @@ class DropletManager
      * @param ?DigitalOceanClient $digitalOceanClient The DigitalOcean client to use for API calls.
      * @param ?Logger             $logger             The logger to use for logging.
      */
-    public function __construct(?string $dropletName = null, string|array|null $config = 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php', ?DigitalOceanClient $digitalOceanClient = null, ?Logger $logger = null)
-    {
+    public function __construct(
+        ?string $dropletName = null,
+        string|array|null $config = 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php',
+        ?DigitalOceanClient $digitalOceanClient = null,
+        ?Logger $logger = null
+    ) {
         if (is_array($config)) {
             // Allow passing the configuration as an array (e.g., for testing purposes)
             $this->config = $config;
@@ -364,5 +368,44 @@ class DropletManager
             $domainRecordClient->create($domainName, 'CNAME', 'www', '@');
             $this->logger->info("Domain $domainName was not found. Created!");
         }
+    }
+
+    /**
+     * Create a new website on the droplet using the CyberPanel API.
+     *
+     * This method prepares the necessary parameters for creating a new website on the droplet
+     * using the CyberPanel API. It then calls the CyberPanel API to create the website and logs
+     * the result of the operation.
+     *
+     * @param array $data The data required to create the website.
+     *
+     * @return array|bool Returns the API response if the website was created successfully, false otherwise.
+     */
+    public function createWebsiteCyberApi(array $data): array|bool
+    {
+        // Prepare parameters for API call
+        $params = [
+            "adminUser" => $this->config[$this->dropletName]['admin'],
+            "adminPass" => $this->config[$this->dropletName]['password'],
+            "domainName" => $data['domainName'],
+            "ownerEmail" => $data['email'],
+            "websiteOwner" => $data['username'],
+            "ownerPassword" => $data['password'],
+            "packageName" => 'Default'
+        ];
+
+        // Connect to the CyberPanel API if not already connected
+        $this->verifyConnectionCyberApi();
+
+        // Call CyberPanel API to create the website
+        $response = $this->cyberApi->create_new_account($params);
+
+        if (!$response['createWebSiteStatus']) {
+            $this->logger->info("Website creation failed: " . $response['error_message']);
+            return false;
+        }
+
+        $this->logger->info("Website created successfully for domain: " . $data['domainName']);
+        return $response;
     }
 }

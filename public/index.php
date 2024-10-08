@@ -6,7 +6,7 @@ use FOfX\DropletManager\DropletManager;
 
 $dropletManager = new DropletManager('test', 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php');
 
-//print_r($dropletManager->getWebsites());
+print_r($dropletManager->getWebsites());
 
 $domain = 'iffduruguay.org';
 $ip     = '137.184.202.167';
