@@ -634,4 +634,64 @@ class DropletManagerTest extends TestCase
         $result = $this->dropletManager->getLinuxUserForDomain('example.com');
         $this->assertFalse($result);
     }
+
+    public function testCreateDatabaseSuccess()
+    {
+        // Mock the CyberLink class
+        $mockCyberLink = $this->createMock(CyberLink::class);
+
+        // Configure the mock to return true for a successful database creation
+        $mockCyberLink->method('createDatabase')
+            ->willReturn(true);
+
+        // Use reflection to inject the mock CyberLink instance
+        $reflection        = new \ReflectionClass($this->dropletManager);
+        $cyberLinkProperty = $reflection->getProperty('cyberLinkConnection');
+        $cyberLinkProperty->setAccessible(true);
+        $cyberLinkProperty->setValue($this->dropletManager, $mockCyberLink);
+
+        // Call createDatabase and check that it returns true
+        $result = $this->dropletManager->createDatabase('example.com', 'testuser', 'password123');
+        $this->assertTrue($result);
+    }
+
+    public function testCreateDatabaseFailure()
+    {
+        // Mock the CyberLink class
+        $mockCyberLink = $this->createMock(CyberLink::class);
+
+        // Configure the mock to return false for a failed database creation
+        $mockCyberLink->method('createDatabase')
+            ->willReturn(false);
+
+        // Use reflection to inject the mock CyberLink instance
+        $reflection        = new \ReflectionClass($this->dropletManager);
+        $cyberLinkProperty = $reflection->getProperty('cyberLinkConnection');
+        $cyberLinkProperty->setAccessible(true);
+        $cyberLinkProperty->setValue($this->dropletManager, $mockCyberLink);
+
+        // Call createDatabase and check that it returns false
+        $result = $this->dropletManager->createDatabase('example.com', 'testuser', 'password123');
+        $this->assertFalse($result);
+    }
+
+    public function testCreateDatabaseException()
+    {
+        // Mock the CyberLink class
+        $mockCyberLink = $this->createMock(CyberLink::class);
+
+        // Configure the mock to throw an exception
+        $mockCyberLink->method('createDatabase')
+            ->willThrowException(new \Exception('Database creation failed'));
+
+        // Use reflection to inject the mock CyberLink instance
+        $reflection        = new \ReflectionClass($this->dropletManager);
+        $cyberLinkProperty = $reflection->getProperty('cyberLinkConnection');
+        $cyberLinkProperty->setAccessible(true);
+        $cyberLinkProperty->setValue($this->dropletManager, $mockCyberLink);
+
+        // Call createDatabase and check that it returns false when an exception is thrown
+        $result = $this->dropletManager->createDatabase('example.com', 'testuser', 'password123');
+        $this->assertFalse($result);
+    }
 }

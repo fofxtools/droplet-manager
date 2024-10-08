@@ -129,3 +129,56 @@ function float_sleep(float $seconds): void
     $microseconds = (int)ceil($seconds * 1000000);
     usleep($microseconds);
 }
+
+/**
+ * Sanitize a domain name for use in MySQL database names.
+ *
+ * @param string $domainName       The domain name to sanitize.
+ * @param string $username         An optional username to append to the sanitized domain.
+ * @param bool   $includeTLD       Whether to include the TLD in the sanitized domain.
+ * @param bool   $forceLetterStart Whether to force the resulting string to start with a letter.
+ * @param string $prefix           The prefix to use if forcing the string to start with a letter.
+ *
+ * @return string The sanitized database name.
+ */
+function sanitize_domain_for_database(string $domainName, string $username = '', bool $includeTLD = true, bool $forceLetterStart = false, string $prefix = 'db_'): string
+{
+    // Remove protocol and www prefix, then convert to lowercase
+    $domain = strtolower(preg_replace('#^(https?://)?(www\.)?#', '', $domainName));
+
+    if (!$includeTLD) {
+        // Remove the TLD
+        $domain = preg_replace('/\.[^.]+$/', '', $domain);
+    }
+
+    // Replace non-alphanumeric characters with underscores and collapse multiple underscores
+    $sanitizedDomain = preg_replace(['/[^a-z0-9]+/', '/_+/'], '_', $domain);
+
+    // Remove leading underscores
+    $sanitizedDomain = ltrim($sanitizedDomain, '_');
+
+    // Check if we need to add a prefix
+    $needsPrefix = $forceLetterStart && !ctype_alpha($sanitizedDomain[0]);
+
+    // Calculate the maximum domain length
+    $maxDomainLength = 64 - (strlen($username) > 0 ? strlen($username) + 1 : 0) - ($needsPrefix ? strlen($prefix) : 0);
+
+    // Truncate the domain if necessary
+    $sanitizedDomain = substr($sanitizedDomain, 0, $maxDomainLength);
+
+    // Add prefix if needed
+    if ($needsPrefix) {
+        $sanitizedDomain = $prefix . $sanitizedDomain;
+    }
+
+    // Append username if provided
+    if ($username) {
+        $sanitizedDomain .= '_' . preg_replace('/[^a-z0-9_]/', '_', strtolower($username));
+    }
+
+    // Ensure the final length doesn't exceed 64 characters
+    $sanitizedDomain = substr($sanitizedDomain, 0, 64);
+
+    // Remove any trailing underscores from the final result
+    return rtrim($sanitizedDomain, '_');
+}

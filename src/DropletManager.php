@@ -92,8 +92,10 @@ class DropletManager
      * Set the SSH connection (mainly for testing purposes).
      *
      * @param SSH2 $sshConnection
+     *
+     * @return void
      */
-    public function setSshConnection(SSH2 $sshConnection)
+    public function setSshConnection(SSH2 $sshConnection): void
     {
         $this->sshConnection = $sshConnection;
     }
@@ -488,20 +490,20 @@ class DropletManager
         $this->verifyConnectionSsh();
 
         // Execute the stat command to get the user owner of the directory
-        $command  = sprintf('stat -c "%%U" /home/%s', escapeshellarg($domain));
-        $username = trim($this->sshConnection->exec($command));
+        $command = sprintf('stat -c "%%U" /home/%s', escapeshellarg($domain));
+        $output  = trim($this->sshConnection->exec($command));
 
         // Check for error in the command output or empty response
-        if (str_contains($username, 'stat: ') || empty($username)) {
-            $this->logger->error("Failed to retrieve user for domain {$domain}: {$username}");
+        if (str_contains($output, 'stat: ') || empty($output)) {
+            $this->logger->error("Failed to retrieve user for domain {$domain}: {$output}");
 
             return false;
         }
 
         // Log and return the retrieved username
-        $this->logger->info("Retrieved Linux user for domain {$domain}: {$username}");
+        $this->logger->info("Retrieved Linux user for domain {$domain}: {$output}");
 
-        return $username;
+        return $output;
     }
 
     /**
@@ -542,7 +544,7 @@ EOF',
 
         // Check if user retrieval was successful
         if ($username === false) {
-            $this->logger->error("Failed to set ownership for .htaccess due to missing Linux user for domain: {$domainName}");
+            $this->logger->error("Did not attempt to set ownership for .htaccess due to missing Linux user for domain: {$domainName}");
 
             return false;
         }
@@ -554,5 +556,31 @@ EOF',
         $this->logger->info("HTTPS redirection configured for domain {$domainName} via .htaccess");
 
         return true;
+    }
+
+    /**
+     * Creates a database for a given domain name and username on the CyberPanel server.
+     *
+     * @param string $domainName The domain name to be associated with the database.
+     * @param string $username   The username for the database.
+     * @param string $password   The password for the database user.
+     *
+     * @return bool True on success, false on failure.
+     */
+    public function createDatabase(string $domainName, string $username, string $password): bool
+    {
+        $cyber = $this->connectCyberLink();
+
+        // Sanitize domain name for MySQL database name
+        $dbName = sanitize_domain_for_database($domainName, $username);
+
+        try {
+            return $cyber->createDatabase($domainName, $dbName, $username, $password);
+        } catch (\Exception $e) {
+            // Log the exception for debugging
+            $this->logger->error('Database creation failed: ' . $e->getMessage());
+
+            return false;
+        }
     }
 }

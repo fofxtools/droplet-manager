@@ -2,9 +2,10 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use FOfX\DropletManager\DropletManager;
+use FOfX\DropletManager\DropletManager as DropletManagerClass;
+use FOfX\DropletManager as DropletManager;
 
-$dropletManager = new DropletManager('test', 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php');
+$dropletManager = new DropletManagerClass('test', 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php');
 
 //print_r($dropletManager->getWebsites());
 $dropletManager->verifyConnectionSsh();
@@ -17,4 +18,7 @@ $ip     = '137.184.202.167';
 //$linuxUser = $dropletManager->getLinuxUserForDomain($domain);
 //echo $linuxUser . PHP_EOL;
 
-$dropletManager->createHtaccessForHttpsRedirect($domain);
+//$dropletManager->createHtaccessForHttpsRedirect($domain);
+
+//echo DropletManager\sanitize_domain_for_database($domain, 'user123', false, 'db_', false);
+//$dropletManager->createDatabase($domain, 'user123', 'password123');
