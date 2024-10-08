@@ -51,7 +51,7 @@ class DropletManagerTest extends TestCase
                 'server_ip'           => '127.0.0.1',
                 'root_password'       => 'root123',
                 'mysql_root_password' => 'mysql123',
-                'cyberpanel_port'     => '8090',
+                'cyberpanel_port'     => 8090,
                 'cyberpanel_admin'    => 'admin',
                 'cyberpanel_password' => 'admin123',
             ],
@@ -532,6 +532,67 @@ class DropletManagerTest extends TestCase
 
         // Test the failure case on the cloned instance
         $result = $this->dropletManagerWithCyberApi->createWebsiteCyberApi($data);
+        $this->assertFalse($result);
+    }
+
+    public function testDeleteWebsiteCyberApiSuccess()
+    {
+        $this->setUpWithCyberApi();
+
+        $data = [
+            'domainName' => 'example.com',
+        ];
+
+        // Sample response from CyberApi::terminate_account indicating success
+        $response = [
+            'status'        => 1,
+            'deleteStatus'  => 1,
+            'error_message' => 'None',
+        ];
+
+        // Configure the CyberApi mock to return a successful response
+        $this->cyberApiMock->expects($this->once())
+            ->method('terminate_account')
+            ->with([
+                'adminUser'  => $this->mockConfig['test-droplet']['cyberpanel_admin'],
+                'adminPass'  => $this->mockConfig['test-droplet']['cyberpanel_password'],
+                'domainName' => $data['domainName'],
+            ])
+            ->willReturn($response);
+
+        // Test the success case
+        $result = $this->dropletManagerWithCyberApi->deleteWebsiteCyberApi($data);
+        $this->assertIsArray($result);
+        $this->assertSame($response, $result);
+    }
+
+    public function testDeleteWebsiteCyberApiFailure()
+    {
+        $this->setUpWithCyberApi();
+
+        $data = [
+            'domainName' => 'example.com',
+        ];
+
+        // Sample response from CyberApi::terminate_account indicating failure
+        $response = [
+            'status'        => 0,
+            'deleteStatus'  => 0,
+            'error_message' => 'Failed to delete website',
+        ];
+
+        // Configure the CyberApi mock to return a failure response
+        $this->cyberApiMock->expects($this->once())
+            ->method('terminate_account')
+            ->with([
+                'adminUser'  => $this->mockConfig['test-droplet']['cyberpanel_admin'],
+                'adminPass'  => $this->mockConfig['test-droplet']['cyberpanel_password'],
+                'domainName' => $data['domainName'],
+            ])
+            ->willReturn($response);
+
+        // Test the failure case
+        $result = $this->dropletManagerWithCyberApi->deleteWebsiteCyberApi($data);
         $this->assertFalse($result);
     }
 }

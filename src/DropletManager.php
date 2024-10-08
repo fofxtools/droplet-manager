@@ -410,4 +410,44 @@ class DropletManager
 
         return $response;
     }
+
+    /**
+     * Delete an existing website on the droplet using the CyberPanel API.
+     *
+     * Note that this does not delete the user from the system, it just deletes the website.
+     *
+     * This method prepares the necessary parameters for deleting a website on the droplet
+     * using the CyberPanel API. It then calls the CyberPanel API to delete the website and logs
+     * the result of the operation.
+     *
+     * @param array $data The data required to delete the website.
+     *
+     * @return array|bool Returns the API response if the website was deleted successfully, false otherwise.
+     */
+    public function deleteWebsiteCyberApi(array $data): array|bool
+    {
+        // Prepare parameters for API call
+        $params = [
+            'adminUser'  => $this->config[$this->dropletName]['cyberpanel_admin'],
+            'adminPass'  => $this->config[$this->dropletName]['cyberpanel_password'],
+            'domainName' => $data['domainName'],
+        ];
+
+        // Connect to the CyberPanel API if not already connected
+        $this->verifyConnectionCyberApi();
+
+        // Call CyberPanel API to delete the website
+        $response = $this->cyberApi->terminate_account($params);
+
+        // Check for success and log accordingly
+        if (isset($response['status']) && $response['status'] === 1) {
+            $this->logger->info('Website deleted successfully for domain: ' . $data['domainName']);
+
+            return $response;
+        } else {
+            $this->logger->info('Website deletion failed: ' . ($response['error_message'] ?? 'Unknown error'));
+
+            return false;
+        }
+    }
 }

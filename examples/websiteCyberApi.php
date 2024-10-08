@@ -12,9 +12,10 @@ $data = [
     'email'        => 'johndoe@email.com',
     'username'     => 'john',
     'password'     => 'password',
-    'domainName'   => 'example3.com',
-    'websiteEmail' => 'admin@example3.com',
+    'domainName'   => 'example.com',
+    'websiteEmail' => 'admin@example.com',
 ];
 
 $result = $dropletManager->createWebsiteCyberApi($data);
+//$result = $dropletManager->deleteWebsiteCyberApi($data);
 var_dump($result);
