@@ -231,8 +231,8 @@ class DropletManager
 
         // If droplet creation timed out
         $duration = round(microtime(true) - $startTime, 2);
-        $this->logger->info('Server creation timed out.');
-        $this->logger->info("Droplet creation attempted for {$duration} seconds.");
+        $this->logger->error('Server creation timed out.');
+        $this->logger->error("Droplet creation attempted for {$duration} seconds.");
 
         return null;
     }
@@ -401,7 +401,7 @@ class DropletManager
         $response = $this->cyberApi->create_new_account($params);
 
         if (!$response['createWebSiteStatus']) {
-            $this->logger->info('Website creation failed: ' . $response['error_message']);
+            $this->logger->error('Website creation failed: ' . $response['error_message']);
 
             return false;
         }
@@ -445,9 +445,49 @@ class DropletManager
 
             return $response;
         } else {
-            $this->logger->info('Website deletion failed: ' . ($response['error_message'] ?? 'Unknown error'));
+            $this->logger->error('Website deletion failed: ' . ($response['error_message'] ?? 'Unknown error'));
 
             return false;
         }
+    }
+
+    /**
+     * Get the Linux user associated with a given domain on the droplet.
+     *
+     * This method establishes an SSH connection to the droplet and retrieves
+     * the owner (Linux user) of the specified domain's directory.
+     *
+     * @param string $domain The domain name to look up the Linux user for.
+     *
+     * @throws \Exception if SSH connection or command execution fails.
+     *
+     * @return string|bool The Linux username if found, false otherwise.
+     */
+    public function getLinuxUserForDomain(string $domain): string|bool
+    {
+        // Initialize SSH connection if not already done
+        if (!$this->sshConnection) {
+            $this->sshConnection = new SSH2($this->config[$this->dropletName]['server_ip']);
+        }
+
+        if (!$this->sshConnection->login('root', $this->config[$this->dropletName]['root_password'])) {
+            throw new \Exception('SSH login failed for user root');
+        }
+
+        // Execute the stat command to get the user owner of the directory
+        $command  = sprintf('stat -c "%%U" /home/%s', escapeshellarg($domain));
+        $username = trim($this->sshConnection->exec($command));
+
+        // Check for error in the command output or empty response
+        if (str_contains($username, 'stat: ') || empty($username)) {
+            $this->logger->error("Failed to retrieve user for domain {$domain}: {$username}");
+
+            return false;
+        }
+
+        // Log and return the retrieved username
+        $this->logger->info("Retrieved Linux user for domain {$domain}: {$username}");
+
+        return $username;
     }
 }

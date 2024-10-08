@@ -595,4 +595,92 @@ class DropletManagerTest extends TestCase
         $result = $this->dropletManagerWithCyberApi->deleteWebsiteCyberApi($data);
         $this->assertFalse($result);
     }
+
+    public function testGetLinuxUserForDomainSuccess()
+    {
+        // Mock the SSH2 class
+        $mockSsh = $this->createMock(SSH2::class);
+
+        // Configure the mock to return a successful login
+        $mockSsh->method('login')->willReturn(true);
+
+        // Configure the mock to return a valid username
+        $mockSsh->method('exec')->willReturn("testuser\n");
+
+        // Use reflection to inject the mock SSH connection
+        $reflection            = new \ReflectionClass($this->dropletManager);
+        $sshConnectionProperty = $reflection->getProperty('sshConnection');
+        $sshConnectionProperty->setAccessible(true);
+        $sshConnectionProperty->setValue($this->dropletManager, $mockSsh);
+
+        // Call the method and assert the result
+        $result = $this->dropletManager->getLinuxUserForDomain('example.com');
+        $this->assertEquals('testuser', $result);
+    }
+
+    public function testGetLinuxUserForDomainLoginFailure()
+    {
+        // Mock the SSH2 class
+        $mockSsh = $this->createMock(SSH2::class);
+
+        // Configure the mock to return a failed login
+        $mockSsh->method('login')->willReturn(false);
+
+        // Use reflection to inject the mock SSH connection
+        $reflection            = new \ReflectionClass($this->dropletManager);
+        $sshConnectionProperty = $reflection->getProperty('sshConnection');
+        $sshConnectionProperty->setAccessible(true);
+        $sshConnectionProperty->setValue($this->dropletManager, $mockSsh);
+
+        // Expect an exception to be thrown
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('SSH login failed for user root');
+
+        // Call the method
+        $this->dropletManager->getLinuxUserForDomain('example.com');
+    }
+
+    public function testGetLinuxUserForDomainCommandFailure()
+    {
+        // Mock the SSH2 class
+        $mockSsh = $this->createMock(SSH2::class);
+
+        // Configure the mock to return a successful login
+        $mockSsh->method('login')->willReturn(true);
+
+        // Configure the mock to return an error message
+        $mockSsh->method('exec')->willReturn("stat: cannot stat '/home/example.com': No such file or directory\n");
+
+        // Use reflection to inject the mock SSH connection
+        $reflection            = new \ReflectionClass($this->dropletManager);
+        $sshConnectionProperty = $reflection->getProperty('sshConnection');
+        $sshConnectionProperty->setAccessible(true);
+        $sshConnectionProperty->setValue($this->dropletManager, $mockSsh);
+
+        // Call the method and assert the result
+        $result = $this->dropletManager->getLinuxUserForDomain('example.com');
+        $this->assertFalse($result);
+    }
+
+    public function testGetLinuxUserForDomainEmptyResponse()
+    {
+        // Mock the SSH2 class
+        $mockSsh = $this->createMock(SSH2::class);
+
+        // Configure the mock to return a successful login
+        $mockSsh->method('login')->willReturn(true);
+
+        // Configure the mock to return an empty response
+        $mockSsh->method('exec')->willReturn('');
+
+        // Use reflection to inject the mock SSH connection
+        $reflection            = new \ReflectionClass($this->dropletManager);
+        $sshConnectionProperty = $reflection->getProperty('sshConnection');
+        $sshConnectionProperty->setAccessible(true);
+        $sshConnectionProperty->setValue($this->dropletManager, $mockSsh);
+
+        // Call the method and assert the result
+        $result = $this->dropletManager->getLinuxUserForDomain('example.com');
+        $this->assertFalse($result);
+    }
 }
