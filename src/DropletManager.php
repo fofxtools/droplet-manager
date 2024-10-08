@@ -583,4 +583,28 @@ EOF',
             return false;
         }
     }
+
+    /**
+     * Drops a database for a given domain name on the CyberPanel server.
+     *
+     * @param string $domainName The domain name associated with the database.
+     * @param string $username   The username for the database.
+     *
+     * @return bool True on success, false on failure.
+     */
+    public function dropDatabase(string $domainName, string $username): bool
+    {
+        $cyber = $this->connectCyberLink();
+
+        // Sanitize the domain name to match the created database name
+        $dbName = sanitize_domain_for_database($domainName, $username);
+
+        try {
+            return $cyber->deleteDatabase($dbName);
+        } catch (\Exception $e) {
+            $this->logger->error('Database deletion failed: ' . $e->getMessage());
+
+            return false;
+        }
+    }
 }

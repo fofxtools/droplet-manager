@@ -22,3 +22,4 @@ $ip     = '137.184.202.167';
 
 //echo DropletManager\sanitize_domain_for_database($domain, 'user123', false, 'db_', false);
 //$dropletManager->createDatabase($domain, 'user123', 'password123');
+$dropletManager->dropDatabase($domain, 'user123');
