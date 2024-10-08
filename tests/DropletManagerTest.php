@@ -51,9 +51,9 @@ class DropletManagerTest extends TestCase
                 'server_ip'           => '127.0.0.1',
                 'root_password'       => 'root123',
                 'mysql_root_password' => 'mysql123',
-                'port'                => '8090',
-                'admin'               => 'admin',
-                'password'            => 'admin123',
+                'cyberpanel_port'     => '8090',
+                'cyberpanel_admin'    => 'admin',
+                'cyberpanel_password' => 'admin123',
             ],
         ];
 
@@ -77,7 +77,7 @@ class DropletManagerTest extends TestCase
         $this->dropletManagerWithCyberApi = clone $this->dropletManager;
 
         // Use reflection to inject the mock CyberApi instance into the cloned DropletManager
-        $reflection = new \ReflectionClass($this->dropletManagerWithCyberApi);
+        $reflection       = new \ReflectionClass($this->dropletManagerWithCyberApi);
         $cyberApiProperty = $reflection->getProperty('cyberApi');
         $cyberApiProperty->setAccessible(true);
         $cyberApiProperty->setValue($this->dropletManagerWithCyberApi, $this->cyberApiMock);
@@ -474,22 +474,22 @@ class DropletManagerTest extends TestCase
         $this->setUpWithCyberApi();
 
         $data = [
-            'firstName' => 'John',
-            'lastName' => 'Doe',
-            'email' => 'johndoe@email.com',
-            'username' => 'john',
-            'password' => 'password',
-            'domainName' => 'example.com',
-            'websiteEmail' => 'admin@example.com'
+            'firstName'    => 'John',
+            'lastName'     => 'Doe',
+            'email'        => 'johndoe@email.com',
+            'username'     => 'john',
+            'password'     => 'password',
+            'domainName'   => 'example.com',
+            'websiteEmail' => 'admin@example.com',
         ];
 
         // Sample response from CyberApi::create_new_account
         $response = [
-            "status" => 1,
-            "createWebSiteStatus" => 1,
-            "error_message" => "None",
-            "tempStatusPath" => "/home/cyberpanel/4563",
-            "LinuxUser" => "examp1239"
+            'status'              => 1,
+            'createWebSiteStatus' => 1,
+            'error_message'       => 'None',
+            'tempStatusPath'      => '/home/cyberpanel/4563',
+            'LinuxUser'           => 'examp1239',
         ];
 
         // Configure the CyberApi mock to return a successful response
@@ -508,21 +508,21 @@ class DropletManagerTest extends TestCase
         $this->setUpWithCyberApi();
 
         $data = [
-            'firstName' => 'John',
-            'lastName' => 'Doe',
-            'email' => 'johndoe@email.com',
-            'username' => 'john',
-            'password' => 'password',
-            'domainName' => 'example.com',
-            'websiteEmail' => 'admin@example.com'
+            'firstName'    => 'John',
+            'lastName'     => 'Doe',
+            'email'        => 'johndoe@email.com',
+            'username'     => 'john',
+            'password'     => 'password',
+            'domainName'   => 'example.com',
+            'websiteEmail' => 'admin@example.com',
         ];
 
         $response = [
-            "status" => 0,
-            "createWebSiteStatus" => 0,
-            "error_message" => "Failed to create website",
-            "tempStatusPath" => "",
-            "LinuxUser" => ""
+            'status'              => 0,
+            'createWebSiteStatus' => 0,
+            'error_message'       => 'Failed to create website',
+            'tempStatusPath'      => '',
+            'LinuxUser'           => '',
         ];
 
         // Mock the CyberApi::create_new_account method

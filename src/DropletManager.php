@@ -137,9 +137,9 @@ class DropletManager
             }
 
             $serverIp  = $this->config[$this->dropletName]['server_ip'];
-            $port      = $this->config[$this->dropletName]['port'];
-            $adminUser = $this->config[$this->dropletName]['admin'];
-            $adminPass = $this->config[$this->dropletName]['password'];
+            $port      = $this->config[$this->dropletName]['cyberpanel_port'];
+            $adminUser = $this->config[$this->dropletName]['cyberpanel_admin'];
+            $adminPass = $this->config[$this->dropletName]['cyberpanel_password'];
 
             // Use the existing CyberApi instance, or create a new one if it's not provided
             $this->cyberApi = $this->cyberApi ?? new CyberApi($serverIp, $port);
@@ -385,13 +385,13 @@ class DropletManager
     {
         // Prepare parameters for API call
         $params = [
-            "adminUser" => $this->config[$this->dropletName]['admin'],
-            "adminPass" => $this->config[$this->dropletName]['password'],
-            "domainName" => $data['domainName'],
-            "ownerEmail" => $data['email'],
-            "websiteOwner" => $data['username'],
-            "ownerPassword" => $data['password'],
-            "packageName" => 'Default'
+            'adminUser'     => $this->config[$this->dropletName]['cyberpanel_admin'],
+            'adminPass'     => $this->config[$this->dropletName]['cyberpanel_password'],
+            'domainName'    => $data['domainName'],
+            'ownerEmail'    => $data['email'],
+            'websiteOwner'  => $data['username'],
+            'ownerPassword' => $data['password'],
+            'packageName'   => 'Default',
         ];
 
         // Connect to the CyberPanel API if not already connected
@@ -401,11 +401,13 @@ class DropletManager
         $response = $this->cyberApi->create_new_account($params);
 
         if (!$response['createWebSiteStatus']) {
-            $this->logger->info("Website creation failed: " . $response['error_message']);
+            $this->logger->info('Website creation failed: ' . $response['error_message']);
+
             return false;
         }
 
-        $this->logger->info("Website created successfully for domain: " . $data['domainName']);
+        $this->logger->info('Website created successfully for domain: ' . $data['domainName']);
+
         return $response;
     }
 }
