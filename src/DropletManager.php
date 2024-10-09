@@ -760,4 +760,19 @@ EOF',
 
         return true;
     }
+
+    /**
+     * Restarts the LiteSpeed web server on the server.
+     *
+     * This method connects to the server via SSH and executes the command to restart
+     * the LiteSpeed web server.
+     *
+     * @return string The output of the restart command.
+     */
+    public function restartLiteSpeed(): string
+    {
+        $cyber = $this->connectCyberLink();
+
+        return $cyber->restartLiteSpeed();
+    }
 }

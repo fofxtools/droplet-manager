@@ -911,4 +911,51 @@ class DropletManagerTest extends TestCase
         // Call the method
         $this->dropletManager->enableSymlinksForDomain($domainName);
     }
+
+    public function testRestartLiteSpeedSuccess()
+    {
+        $this->setUpWithCyberLink();
+
+        // Configure the mock to return a successful restart message
+        $this->cyberLinkMock->method('restartLiteSpeed')
+            ->willReturn('[OK] Send SIGUSR1 to 80579');
+
+        // Call the method
+        $result = $this->dropletManagerWithCyberLink->restartLiteSpeed();
+
+        // Assert that the result matches the expected format
+        $this->assertMatchesRegularExpression('/^\[OK\] Send SIGUSR1 to \d+$/', $result);
+    }
+
+    public function testRestartLiteSpeedFailure()
+    {
+        $this->setUpWithCyberLink();
+
+        // Configure the mock to return an error message
+        // Note: This is a hypothetical error message, adjust as needed
+        $this->cyberLinkMock->method('restartLiteSpeed')
+            ->willReturn('[ERROR] Failed to restart LiteSpeed');
+
+        // Call the method
+        $result = $this->dropletManagerWithCyberLink->restartLiteSpeed();
+
+        // Assert that the result contains an error message
+        $this->assertStringStartsWith('[ERROR]', $result);
+    }
+
+    public function testRestartLiteSpeedException()
+    {
+        $this->setUpWithCyberLink();
+
+        // Configure the mock to throw an exception
+        $this->cyberLinkMock->method('restartLiteSpeed')
+            ->willThrowException(new \Exception('Connection failed'));
+
+        // Expect an exception to be thrown
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Connection failed');
+
+        // Call the method
+        $this->dropletManagerWithCyberLink->restartLiteSpeed();
+    }
 }

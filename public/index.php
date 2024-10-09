@@ -30,4 +30,6 @@ $ip     = '137.184.202.167';
 
 //$dropletManager->setUserPasswordSsh($domain, 'TCdPvFAR4Q');
 
-$dropletManager->enableSymlinksForDomain($domain);
+//$dropletManager->enableSymlinksForDomain($domain);
+
+//echo $dropletManager->restartLiteSpeed();
