@@ -650,4 +650,80 @@ EOF',
             return false;
         }
     }
+
+    /**
+     * Changes the SSH password for a user associated with a given domain.
+     *
+     * Assumes sudo access to the server.
+     *
+     * This method connects to the server via SSH, retrieves the Linux username associated
+     * with the provided domain, and attempts to change the user's password. It then
+     * verifies the password change.
+     *
+     * @param string $domain       The domain name associated with the user account.
+     * @param string $newPassword  The new password to set for the user.
+     * @param bool   $verifyChange Whether to verify the password change.
+     *
+     * @throws \Exception If SSH connection fails or if unable to retrieve the username.
+     *
+     * @return bool Returns true if the password change command was executed successfully,
+     *              even if verification fails. Returns false if there were errors in
+     *              connection, username retrieval, or password change execution.
+     */
+    public function setUserPasswordSsh(string $domain, string $newPassword, bool $verifyChange = true): bool
+    {
+        if (!$this->verifyConnectionSsh()) {
+            $this->logger->error('SSH connection verification failed.');
+
+            return false;
+        }
+
+        $username = $this->getLinuxUserForDomain($domain);
+        if (!$username) {
+            $this->logger->error("Failed to retrieve username for domain: $domain");
+
+            return false;
+        }
+
+        // Change password
+        $changePasswordCommand = sprintf(
+            "printf '%%s:%%s' %s %s | sudo chpasswd",
+            escapeshellarg($username),
+            escapeshellarg($newPassword)
+        );
+        $output = $this->sshConnection->exec($changePasswordCommand);
+
+        if ($output === false) {
+            $this->logger->error("SSH execution failed for password change command for user: $username");
+
+            return false;
+        }
+
+        if ($output !== '') {
+            $this->logger->error("Password change command failed for user: $username. Output: $output");
+
+            return false;
+        }
+
+        $this->logger->info("Password change command executed for user: $username");
+
+        // Verify password change
+        if ($verifyChange) {
+            $verifyCommand = 'sudo passwd -S ' . escapeshellarg($username);
+            $verifyOutput  = $this->sshConnection->exec($verifyCommand);
+
+            // Note: We're still returning true here because the password was likely changed
+            if ($verifyOutput === false) {
+                $this->logger->warning("SSH execution failed for password verification command for user: $username");
+            } elseif (preg_match('/^' . preg_quote($username, '/') . '\s+P\s+/', $verifyOutput) !== 1) {
+                $this->logger->warning(
+                    "Password change could not be verified for user: $username. Output: $verifyOutput"
+                );
+            } else {
+                $this->logger->info("Password successfully changed for user: $username");
+            }
+        }
+
+        return true;
+    }
 }

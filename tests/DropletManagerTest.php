@@ -764,4 +764,106 @@ class DropletManagerTest extends TestCase
         // Call the method
         $this->dropletManager->grantRemoteDatabaseAccess('example.com', 'testuser', 'password123');
     }
+
+    public function testSetUserPasswordSshSuccess()
+    {
+        // Configure mocks
+        $this->sshMock->method('login')->willReturn(true);
+        // Check 3 exec() calls
+        $this->sshMock->expects($this->exactly(3))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'testuser',  // getLinuxUserForDomain
+                '',          // chpasswd command (success)
+                'testuser P 10/09/2024 0 99999 7 -1'  // passwd -S command
+            );
+
+        // Call the method
+        $result = $this->dropletManager->setUserPasswordSsh('example.com', 'newpassword');
+
+        // Assert
+        $this->assertTrue($result);
+    }
+
+    public function testSetUserPasswordSshFailsOnSSHConnectionVerification()
+    {
+        // Configure mock
+        $this->sshMock->method('login')->willReturn(false);
+
+        // Expect an exception to be thrown
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Login failed.');
+
+        // Call the method
+        $this->dropletManager->setUserPasswordSsh('example.com', 'newpassword');
+    }
+
+    public function testSetUserPasswordSshFailsOnGetLinuxUserForDomain()
+    {
+        // Configure mocks
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('exec')
+            ->willReturn('');  // Empty response from getLinuxUserForDomain
+
+        // Call the method
+        $result = $this->dropletManager->setUserPasswordSsh('example.com', 'newpassword');
+
+        // Assert
+        $this->assertFalse($result);
+    }
+
+    public function testSetUserPasswordSshFailsOnPasswordChangeCommand()
+    {
+        // Configure mocks
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(2))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'testuser',  // getLinuxUserForDomain
+                'chpasswd: (user testuser) pam_chauthtok() failed'  // chpasswd command (failure)
+            );
+
+        // Call the method
+        $result = $this->dropletManager->setUserPasswordSsh('example.com', 'newpassword');
+
+        // Assert
+        $this->assertFalse($result);
+    }
+
+    public function testSetUserPasswordSshSucceedsWithoutVerification()
+    {
+        // Configure mocks
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(2))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'testuser',  // getLinuxUserForDomain
+                ''           // chpasswd command (success)
+            );
+
+        // Call the method with verifyChange set to false
+        $result = $this->dropletManager->setUserPasswordSsh('example.com', 'newpassword', false);
+
+        // Assert
+        $this->assertTrue($result);
+    }
+
+    public function testSetUserPasswordSshSucceedsButFailsVerification()
+    {
+        // Configure mocks
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(3))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'testuser',  // getLinuxUserForDomain
+                '',          // chpasswd command (success)
+                'testuser L 10/09/2024 0 99999 7 -1'  // passwd -S command (locked account)
+            );
+
+        // Call the method
+        $result = $this->dropletManager->setUserPasswordSsh('example.com', 'newpassword');
+
+        // Assert
+        $this->assertTrue($result);  // The method still returns true even if verification fails
+    }
 }

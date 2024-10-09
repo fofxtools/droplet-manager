@@ -26,9 +26,6 @@ $ip     = '137.184.202.167';
 //$dropletManager->dropDatabase($domain, 'user123');
 //$dropletManager->grantRemoteDatabaseAccess($domain, 'user123', 'password123');
 
-$array = ['example.com', 'test-user', 'pass"word'];
-foreach ($array as $item) {
-    echo $item . ': ' . DropletManager\sanitize_domain_for_database($item, 'user123') . PHP_EOL;
-}
-
 //print_r($cyberLink->listDatabases($domain));
+
+$dropletManager->setUserPasswordSsh($domain, 'TCdPvFAR4Q');
