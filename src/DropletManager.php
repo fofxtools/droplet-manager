@@ -623,7 +623,7 @@ EOF',
      */
     public function grantRemoteDatabaseAccess(string $domainName, string $username, string $password): bool
     {
-        // Verify the SSH connection
+        // Ensure SSH connection is established
         $this->verifyConnectionSsh();
 
         // Sanitize the domain name for database compatibility
@@ -672,11 +672,8 @@ EOF',
      */
     public function setUserPasswordSsh(string $domain, string $newPassword, bool $verifyChange = true): bool
     {
-        if (!$this->verifyConnectionSsh()) {
-            $this->logger->error('SSH connection verification failed.');
-
-            return false;
-        }
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
 
         $username = $this->getLinuxUserForDomain($domain);
         if (!$username) {
@@ -723,6 +720,43 @@ EOF',
                 $this->logger->info("Password successfully changed for user: $username");
             }
         }
+
+        return true;
+    }
+
+    /**
+     * Enables symbolic link usage for a given domain by updating the server configuration.
+     *
+     * This method connects to the server via SSH and modifies the httpd_config.conf
+     * file to set the "restrained" directive to 0 for the specified domain, effectively
+     * enabling symbolic link usage within that domain's virtual host configuration.
+     *
+     * @param string $domainName The name of the domain for which symbolic links should be enabled.
+     *
+     * @return bool Returns true if the configuration update was successful, false if an error occurred.
+     */
+    public function enableSymlinksForDomain(string $domainName): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        // Command to update the symbolic link restrictions for the domain
+        // Use escapeshellcmd() instead of escapeshellarg() to avoid issue with quotes
+        $command = sprintf(
+            "sed -i '/^virtualHost %s {/,/^}/ s/restrained[[:space:]]*[0-9]/restrained              0/' /usr/local/lsws/conf/httpd_config.conf",
+            escapeshellcmd($domainName)
+        );
+
+        // Execute the command on the server
+        $output = $this->sshConnection->exec($command);
+
+        if ($output === false) {
+            $this->logger->error("Failed to enable symbolic links for domain: $domainName");
+
+            return false;
+        }
+
+        $this->logger->info("Symbolic links enabled for domain: $domainName");
 
         return true;
     }

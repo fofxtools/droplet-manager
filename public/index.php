@@ -28,4 +28,6 @@ $ip     = '137.184.202.167';
 
 //print_r($cyberLink->listDatabases($domain));
 
-$dropletManager->setUserPasswordSsh($domain, 'TCdPvFAR4Q');
+//$dropletManager->setUserPasswordSsh($domain, 'TCdPvFAR4Q');
+
+$dropletManager->enableSymlinksForDomain($domain);

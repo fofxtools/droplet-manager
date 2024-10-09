@@ -866,4 +866,49 @@ class DropletManagerTest extends TestCase
         // Assert
         $this->assertTrue($result);  // The method still returns true even if verification fails
     }
+
+    public function testEnableSymlinksForDomainSuccess(): void
+    {
+        $domainName = 'example.com';
+
+        // Mock the SSH connection login to return true for successful connection
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Mock the exec method to simulate successful execution of the sed command
+        $this->sshMock->method('exec')->willReturn('');  // Simulate success by returning an empty string
+
+        // Call the method and assert that it returns true on success
+        $result = $this->dropletManager->enableSymlinksForDomain($domainName);
+        $this->assertTrue($result);
+    }
+
+    public function testEnableSymlinksForDomainCommandFailure(): void
+    {
+        $domainName = 'example.com';
+
+        // Mock the SSH login to return true for successful connection
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Mock the exec method to return false, simulating a command failure
+        $this->sshMock->method('exec')->willReturn(false);
+
+        // Call the method and assert that it returns false on command failure
+        $result = $this->dropletManager->enableSymlinksForDomain($domainName);
+        $this->assertFalse($result);
+    }
+
+    public function testEnableSymlinksForDomainFailsOnSSHConnectionVerification(): void
+    {
+        $domainName = 'example.com';
+
+        // Mock the SSH login to return false, simulating a connection failure
+        $this->sshMock->method('login')->willReturn(false);
+
+        // Expect an exception to be thrown due to login failure
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Login failed.');
+
+        // Call the method
+        $this->dropletManager->enableSymlinksForDomain($domainName);
+    }
 }
