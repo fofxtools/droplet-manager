@@ -607,4 +607,47 @@ EOF',
             return false;
         }
     }
+
+    /**
+     * Grants remote access to a database on the droplet.
+     *
+     * This method allows a specified user to connect to the database from any remote host.
+     *
+     * @param string $domainName The domain name associated with the database.
+     * @param string $username   The username for the database.
+     * @param string $password   The password for the database user.
+     *
+     * @throws \Exception If the SSH login fails.
+     *
+     * @return bool True on success, false on failure.
+     */
+    public function grantRemoteDatabaseAccess(string $domainName, string $username, string $password): bool
+    {
+        // Verify the SSH connection
+        $this->verifyConnectionSsh();
+
+        // Sanitize the domain name for database compatibility
+        $database = sanitize_domain_for_database($domainName, $username);
+
+        // Construct the command to grant remote access
+        $grantCommand = sprintf(
+            "mysql -uroot -p%s -e \"GRANT ALL PRIVILEGES ON %s.* TO '%s'@'%%' IDENTIFIED BY '%s'; FLUSH PRIVILEGES;\"",
+            escapeshellarg($this->config[$this->dropletName]['mysql_root_password']),
+            escapeshellarg($database),
+            escapeshellarg($username),
+            escapeshellarg($password)
+        );
+
+        // Execute the grant command via SSH
+        try {
+            $output = $this->sshConnection->exec($grantCommand);
+            $this->logger->info("Remote access granted to database '{$database}' for user '{$username}'.");
+
+            return true;
+        } catch (\Exception $e) {
+            $this->logger->error('Failed to grant remote access: ' . $e->getMessage());
+
+            return false;
+        }
+    }
 }

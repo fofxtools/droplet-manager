@@ -690,4 +690,78 @@ class DropletManagerTest extends TestCase
         $result = $this->dropletManagerWithCyberLink->dropDatabase('example.com', 'testuser');
         $this->assertFalse($result);
     }
+
+    public function testGrantRemoteDatabaseAccessSuccess()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Set up the expectation before calling the method
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->with($this->stringContains('GRANT ALL PRIVILEGES ON'))
+            ->willReturn('');  // An empty string typically indicates success for MySQL commands
+
+        // Call the method
+        $result = $this->dropletManager->grantRemoteDatabaseAccess('example.com', 'testuser', 'password123');
+
+        // Assert that the method returns true on success
+        $this->assertTrue($result);
+    }
+
+    public function testGrantRemoteDatabaseAccessFailure()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Set up the expectation before calling the method
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willThrowException(new \Exception('MySQL error'));
+
+        // Call the method
+        $result = $this->dropletManager->grantRemoteDatabaseAccess('example.com', 'testuser', 'password123');
+
+        // Assert that the method returns false on failure
+        $this->assertFalse($result);
+    }
+
+    public function testGrantRemoteDatabaseAccessSanitizesInput()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        $domainName = 'example.com';
+        $username   = 'test-user';
+        $password   = 'pass"word';
+
+        // Set up the expectation before calling the method
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->with($this->logicalAnd(
+                $this->stringContains(escapeshellarg(\FOfX\DropletManager\sanitize_domain_for_database($domainName, $username))),
+                $this->stringContains(escapeshellarg($username)),
+                $this->stringContains(escapeshellarg($password))
+            ))
+            ->willReturn('');
+
+        // Call the method with a domain name that needs sanitization
+        $result = $this->dropletManager->grantRemoteDatabaseAccess($domainName, $username, $password);
+
+        // Assert that the method returns true
+        $this->assertTrue($result);
+    }
+
+    public function testGrantRemoteDatabaseAccessVerifiesSSHConnection()
+    {
+        // Configure the SSH mock to fail login
+        $this->sshMock->method('login')->willReturn(false);
+
+        // Expect an exception to be thrown
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Login failed.');
+
+        // Call the method
+        $this->dropletManager->grantRemoteDatabaseAccess('example.com', 'testuser', 'password123');
+    }
 }
