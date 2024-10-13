@@ -9,12 +9,12 @@ use Monolog\Handler\StreamHandler;
 use Monolog\Level;
 
 /**
- * DropletManager class
+ * Manager class
  *
  * This class is responsible for managing DigitalOcean droplets, including creating
  * and deleting droplets.
  */
-class DropletManager
+class Manager
 {
     private $config;
     private $cyberApi;

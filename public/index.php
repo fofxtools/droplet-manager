@@ -2,34 +2,34 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use FOfX\DropletManager\DropletManager as DropletManagerClass;
-use FOfX\DropletManager as DropletManager;
+use FOfX\DropletManager;
+use FOfX\DropletManager\Manager;
 
-$dropletManager = new DropletManagerClass('test', 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php');
-$cyberLink      = $dropletManager->connectCyberLink();
+$manager   = new Manager('test', 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php');
+$cyberLink = $manager->connectCyberLink();
 
-//print_r($dropletManager->getWebsites());
-$dropletManager->verifyConnectionSsh();
+//print_r($manager->getWebsites());
+$manager->verifyConnectionSsh();
 
 //$domain = 'iffduruguay.org';
 $domain = 'example.com';
 $ip     = '137.184.202.167';
-//$dropletManager->configureDns($domain, $ip);
+//$manager->configureDns($domain, $ip);
 
-//$linuxUser = $dropletManager->getLinuxUserForDomain($domain);
+//$linuxUser = $manager->getLinuxUserForDomain($domain);
 //echo $linuxUser . PHP_EOL;
 
-//$dropletManager->createHtaccessForHttpsRedirect($domain);
+//$manager->createHtaccessForHttpsRedirect($domain);
 
-//echo DropletManager\sanitize_domain_for_database($domain, 'user123', false, 'db_', false);
-//$dropletManager->createDatabase($domain, 'user123', 'password123');
-//$dropletManager->dropDatabase($domain, 'user123');
-//$dropletManager->grantRemoteDatabaseAccess($domain, 'user123', 'password123');
+//echo DropletManager\sanitize_domain_for_database($domain, 'user123', true, false, 'db_');
+//$manager->createDatabase($domain, 'user123', 'password123');
+//$manager->dropDatabase($domain, 'user123');
+//$manager->grantRemoteDatabaseAccess($domain, 'user123', 'password123');
 
 //print_r($cyberLink->listDatabases($domain));
 
-//$dropletManager->setUserPasswordSsh($domain, 'TCdPvFAR4Q');
+//$manager->setUserPasswordSsh($domain, 'TCdPvFAR4Q');
 
-//$dropletManager->enableSymlinksForDomain($domain);
+//$manager->enableSymlinksForDomain($domain);
 
-//echo $dropletManager->restartLiteSpeed();
+//echo $manager->restartLiteSpeed();

@@ -19,10 +19,13 @@ This PHP library provides functionality to manage DigitalOcean droplets, CyberPa
 ## Usage
 Here is an example of how to create a droplet:
 ```php
-use FOfX\DropletManager\ConfigurationManager;
-use FOfX\DropletManager\DropletManager;
+use FOfX\DropletManager\Manager;
 
-$configManager = new ConfigurationManager();
-$dropletManager = new DropletManager($configManager);
+$manager = new Manager();
 
-$dropletManager->createDroplet('example-droplet', 'nyc3', 's-1vcpu-1gb');
+$manager->createDroplet('example-droplet', 'nyc3', 's-1vcpu-1gb');
+
+// If a droplet already exists, create a new Manager for that droplet
+$manager = new Manager('example-droplet');
+// List websites on the droplet
+print_r($manager->getWebsites());

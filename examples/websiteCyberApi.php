@@ -2,9 +2,9 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use FOfX\DropletManager\DropletManager;
+use FOfX\DropletManager\Manager;
 
-$dropletManager = new DropletManager('test', 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php');
+$manager = new Manager('test', 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php');
 
 $data = [
     'firstName'    => 'John',
@@ -16,6 +16,6 @@ $data = [
     'websiteEmail' => 'admin@example.com',
 ];
 
-$result = $dropletManager->createWebsiteCyberApi($data);
-//$result = $dropletManager->deleteWebsiteCyberApi($data);
+$result = $manager->createWebsiteCyberApi($data);
+//$result = $manager->deleteWebsiteCyberApi($data);
 var_dump($result);

@@ -2,7 +2,7 @@
 
 namespace FOfX\DropletManager\Tests;
 
-use FOfX\DropletManager\DropletManager;
+use FOfX\DropletManager\Manager;
 use PHPUnit\Framework\TestCase;
 use phpseclib3\Net\SSH2;
 use FOfX\DropletManager\CyberApi;
@@ -14,22 +14,22 @@ use Monolog\Logger;
 use Monolog\Handler\NullHandler;
 
 /**
- * Unit tests for the DropletManager class.
+ * Unit tests for the Manager class.
  */
-class DropletManagerTest extends TestCase
+class ManagerTest extends TestCase
 {
-    private $dropletManager;
+    private $manager;
     private $mockConfig;
     private $mockClient;
     private $mockDropletApi;
     private $cyberApiMock;
     private $cyberLinkMock;
-    private $dropletManagerWithCyberApi;
-    private $dropletManagerWithCyberLink;
+    private $managerWithCyberApi;
+    private $managerWithCyberLink;
     private $sshMock;
 
     /**
-     * Setup the DropletManager instance with a mock configuration before each test.
+     * Setup the Manager instance with a mock configuration before each test.
      */
     protected function setUp(): void
     {
@@ -67,14 +67,14 @@ class DropletManagerTest extends TestCase
         // Mock the CyberApi dependency
         $this->cyberApiMock = $this->createMock(CyberApi::class);
 
-        // Create a DropletManager instance with the mocked client and configuration
-        $this->dropletManager = new DropletManager('test-droplet', $this->mockConfig, $this->mockClient, $logger);
+        // Create a Manager instance with the mocked client and configuration
+        $this->manager = new Manager('test-droplet', $this->mockConfig, $this->mockClient, $logger);
 
         // Mock the SSH2 class
         $this->sshMock = $this->createMock(SSH2::class);
 
         // Inject the mock SSH connection
-        $this->dropletManager->setSshConnection($this->sshMock);
+        $this->manager->setSshConnection($this->sshMock);
     }
 
     /**
@@ -82,14 +82,14 @@ class DropletManagerTest extends TestCase
      */
     private function setUpWithCyberApi()
     {
-        // Clone the main DropletManager instance to avoid impacting other tests
-        $this->dropletManagerWithCyberApi = clone $this->dropletManager;
+        // Clone the main Manager instance to avoid impacting other tests
+        $this->managerWithCyberApi = clone $this->manager;
 
-        // Use reflection to inject the mock CyberApi instance into the cloned DropletManager
-        $reflection       = new \ReflectionClass($this->dropletManagerWithCyberApi);
+        // Use reflection to inject the mock CyberApi instance into the cloned Manager
+        $reflection       = new \ReflectionClass($this->managerWithCyberApi);
         $cyberApiProperty = $reflection->getProperty('cyberApi');
         $cyberApiProperty->setAccessible(true);
-        $cyberApiProperty->setValue($this->dropletManagerWithCyberApi, $this->cyberApiMock);
+        $cyberApiProperty->setValue($this->managerWithCyberApi, $this->cyberApiMock);
     }
 
     /**
@@ -97,17 +97,17 @@ class DropletManagerTest extends TestCase
      */
     private function setUpWithCyberLink()
     {
-        // Clone the main DropletManager instance to avoid impacting other tests
-        $this->dropletManagerWithCyberLink = clone $this->dropletManager;
+        // Clone the main Manager instance to avoid impacting other tests
+        $this->managerWithCyberLink = clone $this->manager;
 
         // Create a mock CyberLink
         $this->cyberLinkMock = $this->createMock(CyberLink::class);
 
-        // Use reflection to inject the mock CyberLink instance into the cloned DropletManager
-        $reflection        = new \ReflectionClass($this->dropletManagerWithCyberLink);
+        // Use reflection to inject the mock CyberLink instance into the cloned Manager
+        $reflection        = new \ReflectionClass($this->managerWithCyberLink);
         $cyberLinkProperty = $reflection->getProperty('cyberLinkConnection');
         $cyberLinkProperty->setAccessible(true);
-        $cyberLinkProperty->setValue($this->dropletManagerWithCyberLink, $this->cyberLinkMock);
+        $cyberLinkProperty->setValue($this->managerWithCyberLink, $this->cyberLinkMock);
     }
 
     /**
@@ -115,8 +115,8 @@ class DropletManagerTest extends TestCase
      */
     public function testSetAndGetDropletName(): void
     {
-        $this->dropletManager->setDropletName('new-droplet');
-        $this->assertSame('new-droplet', $this->dropletManager->getDropletName());
+        $this->manager->setDropletName('new-droplet');
+        $this->assertSame('new-droplet', $this->manager->getDropletName());
     }
 
     /**
@@ -125,13 +125,13 @@ class DropletManagerTest extends TestCase
     public function testSetSshConnection(): void
     {
         $mockSsh = $this->createMock(SSH2::class);
-        $this->dropletManager->setSshConnection($mockSsh);
+        $this->manager->setSshConnection($mockSsh);
 
-        $reflection            = new \ReflectionClass($this->dropletManager);
+        $reflection            = new \ReflectionClass($this->manager);
         $sshConnectionProperty = $reflection->getProperty('sshConnection');
         $sshConnectionProperty->setAccessible(true);
 
-        $this->assertSame($mockSsh, $sshConnectionProperty->getValue($this->dropletManager));
+        $this->assertSame($mockSsh, $sshConnectionProperty->getValue($this->manager));
     }
 
     /**
@@ -141,7 +141,7 @@ class DropletManagerTest extends TestCase
     {
         $this->sshMock->method('login')->willReturn(true);
 
-        $this->assertTrue($this->dropletManager->verifyConnectionSsh());
+        $this->assertTrue($this->manager->verifyConnectionSsh());
     }
 
     /**
@@ -154,7 +154,7 @@ class DropletManagerTest extends TestCase
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('Login failed.');
 
-        $this->dropletManager->verifyConnectionSsh();
+        $this->manager->verifyConnectionSsh();
     }
 
     /**
@@ -166,10 +166,10 @@ class DropletManagerTest extends TestCase
         $this->expectExceptionMessage('Configuration for droplet non-existent-droplet not found.');
 
         // Set a non-existent droplet
-        $this->dropletManager->setDropletName('non-existent-droplet');
+        $this->manager->setDropletName('non-existent-droplet');
 
         // Test the missing droplet configuration
-        $this->dropletManager->verifyConnectionSsh();
+        $this->manager->verifyConnectionSsh();
     }
 
     /**
@@ -184,7 +184,7 @@ class DropletManagerTest extends TestCase
             ->willReturn(['verifyConn' => true]);
 
         // Test the successful API connection
-        $this->assertTrue($this->dropletManagerWithCyberApi->verifyConnectionCyberApi());
+        $this->assertTrue($this->managerWithCyberApi->verifyConnectionCyberApi());
     }
 
     /**
@@ -199,7 +199,7 @@ class DropletManagerTest extends TestCase
             ->willReturn(['verifyConn' => false]);
 
         // Test the API connection failure
-        $this->assertFalse($this->dropletManagerWithCyberApi->verifyConnectionCyberApi());
+        $this->assertFalse($this->managerWithCyberApi->verifyConnectionCyberApi());
     }
 
     /**
@@ -214,7 +214,7 @@ class DropletManagerTest extends TestCase
             ->willThrowException(new \Exception('API connection failed'));
 
         // Test that the exception is handled and false is returned
-        $this->assertFalse($this->dropletManagerWithCyberApi->verifyConnectionCyberApi());
+        $this->assertFalse($this->managerWithCyberApi->verifyConnectionCyberApi());
     }
 
     /**
@@ -223,10 +223,10 @@ class DropletManagerTest extends TestCase
     public function testVerifyConnectionCyberApiReturnsFalseWhenConfigMissing(): void
     {
         // Set a non-existent droplet
-        $this->dropletManager->setDropletName('non-existent-droplet');
+        $this->manager->setDropletName('non-existent-droplet');
 
         // Assert that verifyConnectionCyberApi() returns false
-        $this->assertFalse($this->dropletManager->verifyConnectionCyberApi());
+        $this->assertFalse($this->manager->verifyConnectionCyberApi());
     }
 
     /**
@@ -240,7 +240,7 @@ class DropletManagerTest extends TestCase
             ->with($this->mockConfig['digitalocean']['token']);
 
         // Call the method under test
-        $this->dropletManager->authenticateDigitalOcean();
+        $this->manager->authenticateDigitalOcean();
     }
 
     /**
@@ -249,17 +249,17 @@ class DropletManagerTest extends TestCase
     public function testAuthenticateDigitalOceanDoesNotCallAuthenticateWhenAlreadyAuthenticated()
     {
         // Use reflection to set the private property digitalOceanClientIsAuthenticated to true
-        $reflection = new \ReflectionClass($this->dropletManager);
+        $reflection = new \ReflectionClass($this->manager);
         $property   = $reflection->getProperty('digitalOceanClientIsAuthenticated');
         $property->setAccessible(true);
-        $property->setValue($this->dropletManager, true);
+        $property->setValue($this->manager, true);
 
         // Expect authenticate to not be called at all
         $this->mockClient->expects($this->never())
             ->method('authenticate');
 
         // Call the method under test
-        $this->dropletManager->authenticateDigitalOcean();
+        $this->manager->authenticateDigitalOcean();
     }
 
     public function testCreateDropletSuccess()
@@ -276,7 +276,7 @@ class DropletManagerTest extends TestCase
         $this->mockDropletApi->method('getById')->willReturn($dropletInfo);
 
         // Call createDroplet and expect the IP address to be returned
-        $ipAddress = $this->dropletManager->createDroplet('test-droplet', 'nyc3', 's-1vcpu-1gb');
+        $ipAddress = $this->manager->createDroplet('test-droplet', 'nyc3', 's-1vcpu-1gb');
 
         // Check if the IP address is correct
         $this->assertEquals('192.168.1.1', $ipAddress);
@@ -292,7 +292,7 @@ class DropletManagerTest extends TestCase
         $this->mockDropletApi->method('getById')->willReturnOnConsecutiveCalls(...array_fill(0, 35, $dropletInfo));
 
         // Call createDroplet with a very short sleep duration
-        $ipAddress = $this->dropletManager->createDroplet('test-droplet', 'nyc3', 's-1vcpu-1gb', 0.001);
+        $ipAddress = $this->manager->createDroplet('test-droplet', 'nyc3', 's-1vcpu-1gb', 0.001);
 
         // Expect null because of timeout
         $this->assertNull($ipAddress);
@@ -304,7 +304,7 @@ class DropletManagerTest extends TestCase
         $mockCyberLink = $this->createMock(CyberLink::class);
 
         // Call connectCyberLink with the mock CyberLink and expect the mock to be returned
-        $cyberLinkConnection = $this->dropletManager->connectCyberLink($mockCyberLink);
+        $cyberLinkConnection = $this->manager->connectCyberLink($mockCyberLink);
 
         // Assert that the mock CyberLink connection is returned
         $this->assertSame($mockCyberLink, $cyberLinkConnection);
@@ -315,17 +315,17 @@ class DropletManagerTest extends TestCase
         // Mock the CyberLink class
         $mockCyberLink = $this->createMock(CyberLink::class);
 
-        // Mock the DropletManager class, specifically the connectCyberLink method
-        $dropletManager = $this->getMockBuilder(DropletManager::class)
+        // Mock the Manager class, specifically the connectCyberLink method
+        $manager = $this->getMockBuilder(Manager::class)
             ->setConstructorArgs(['test-droplet', $this->mockConfig, $this->mockClient])
             ->onlyMethods(['connectCyberLink'])
             ->getMock();
 
         // Ensure that connectCyberLink creates a new mock CyberLink instance
-        $dropletManager->method('connectCyberLink')->willReturn($mockCyberLink);
+        $manager->method('connectCyberLink')->willReturn($mockCyberLink);
 
         // Call the method to trigger the logic
-        $cyberLinkConnection = $dropletManager->connectCyberLink();
+        $cyberLinkConnection = $manager->connectCyberLink();
 
         // Assert that the mock CyberLink connection is returned
         $this->assertSame($mockCyberLink, $cyberLinkConnection);
@@ -337,13 +337,13 @@ class DropletManagerTest extends TestCase
         $mockCyberLink = $this->createMock(CyberLink::class);
 
         // Use reflection to inject the mock CyberLink connection
-        $reflection        = new \ReflectionClass($this->dropletManager);
+        $reflection        = new \ReflectionClass($this->manager);
         $cyberLinkProperty = $reflection->getProperty('cyberLinkConnection');
         $cyberLinkProperty->setAccessible(true);
-        $cyberLinkProperty->setValue($this->dropletManager, $mockCyberLink);
+        $cyberLinkProperty->setValue($this->manager, $mockCyberLink);
 
         // Call connectCyberLink and expect the existing connection to be reused
-        $cyberLinkConnection = $this->dropletManager->connectCyberLink();
+        $cyberLinkConnection = $this->manager->connectCyberLink();
 
         // Assert that the existing connection is returned
         $this->assertSame($mockCyberLink, $cyberLinkConnection);
@@ -369,7 +369,7 @@ class DropletManagerTest extends TestCase
         $mockDomain->expects($this->once())->method('getByName')->with('example.com');
 
         // Assert that the method returns true
-        $this->assertTrue($this->dropletManager->isDomainConfigured('example.com'));
+        $this->assertTrue($this->manager->isDomainConfigured('example.com'));
     }
 
     /**
@@ -392,7 +392,7 @@ class DropletManagerTest extends TestCase
         $mockDomain->expects($this->once())->method('getByName')->with('nonexistent.com');
 
         // Assert that the method returns false
-        $this->assertFalse($this->dropletManager->isDomainConfigured('nonexistent.com'));
+        $this->assertFalse($this->manager->isDomainConfigured('nonexistent.com'));
     }
 
     /**
@@ -409,7 +409,7 @@ class DropletManagerTest extends TestCase
         ]);
 
         // Call getWebsites and check that the result is as expected
-        $result = $this->dropletManagerWithCyberLink->getWebsites();
+        $result = $this->managerWithCyberLink->getWebsites();
 
         $this->assertIsArray($result);
         $this->assertCount(2, $result);
@@ -428,7 +428,7 @@ class DropletManagerTest extends TestCase
         $this->cyberLinkMock->method('listWebsites')->willReturn([]);
 
         // Call getWebsites and check that the result is an empty array
-        $result = $this->dropletManagerWithCyberLink->getWebsites();
+        $result = $this->managerWithCyberLink->getWebsites();
 
         $this->assertIsArray($result);
         $this->assertEmpty($result);
@@ -446,7 +446,7 @@ class DropletManagerTest extends TestCase
 
         // Call getWebsites and check that an exception is thrown and handled
         $this->expectException(\Exception::class);
-        $this->dropletManagerWithCyberLink->getWebsites();
+        $this->managerWithCyberLink->getWebsites();
     }
 
     public function testCreateWebsiteCyberApiSuccess()
@@ -478,7 +478,7 @@ class DropletManagerTest extends TestCase
             ->willReturn($response);
 
         // Test the method on the cloned instance with the CyberApi mock
-        $result = $this->dropletManagerWithCyberApi->createWebsiteCyberApi($data);
+        $result = $this->managerWithCyberApi->createWebsiteCyberApi($data);
         $this->assertIsArray($result);
         $this->assertSame($response, $result);
     }
@@ -511,7 +511,7 @@ class DropletManagerTest extends TestCase
             ->willReturn($response);
 
         // Test the failure case on the cloned instance
-        $result = $this->dropletManagerWithCyberApi->createWebsiteCyberApi($data);
+        $result = $this->managerWithCyberApi->createWebsiteCyberApi($data);
         $this->assertFalse($result);
     }
 
@@ -541,7 +541,7 @@ class DropletManagerTest extends TestCase
             ->willReturn($response);
 
         // Test the success case
-        $result = $this->dropletManagerWithCyberApi->deleteWebsiteCyberApi($data);
+        $result = $this->managerWithCyberApi->deleteWebsiteCyberApi($data);
         $this->assertIsArray($result);
         $this->assertSame($response, $result);
     }
@@ -572,7 +572,7 @@ class DropletManagerTest extends TestCase
             ->willReturn($response);
 
         // Test the failure case
-        $result = $this->dropletManagerWithCyberApi->deleteWebsiteCyberApi($data);
+        $result = $this->managerWithCyberApi->deleteWebsiteCyberApi($data);
         $this->assertFalse($result);
     }
 
@@ -581,7 +581,7 @@ class DropletManagerTest extends TestCase
         $this->sshMock->method('login')->willReturn(true);
         $this->sshMock->method('exec')->willReturn("testuser\n");
 
-        $result = $this->dropletManager->getLinuxUserForDomain('example.com');
+        $result = $this->manager->getLinuxUserForDomain('example.com');
         $this->assertEquals('testuser', $result);
     }
 
@@ -592,7 +592,7 @@ class DropletManagerTest extends TestCase
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('Login failed.');
 
-        $this->dropletManager->getLinuxUserForDomain('example.com');
+        $this->manager->getLinuxUserForDomain('example.com');
     }
 
     public function testGetLinuxUserForDomainCommandFailure()
@@ -600,7 +600,7 @@ class DropletManagerTest extends TestCase
         $this->sshMock->method('login')->willReturn(true);
         $this->sshMock->method('exec')->willReturn("stat: cannot stat '/home/example.com': No such file or directory\n");
 
-        $result = $this->dropletManager->getLinuxUserForDomain('example.com');
+        $result = $this->manager->getLinuxUserForDomain('example.com');
         $this->assertFalse($result);
     }
 
@@ -609,7 +609,7 @@ class DropletManagerTest extends TestCase
         $this->sshMock->method('login')->willReturn(true);
         $this->sshMock->method('exec')->willReturn('');
 
-        $result = $this->dropletManager->getLinuxUserForDomain('example.com');
+        $result = $this->manager->getLinuxUserForDomain('example.com');
         $this->assertFalse($result);
     }
 
@@ -622,7 +622,7 @@ class DropletManagerTest extends TestCase
             ->willReturn(true);
 
         // Call createDatabase and check that it returns true
-        $result = $this->dropletManagerWithCyberLink->createDatabase('example.com', 'testuser', 'password123');
+        $result = $this->managerWithCyberLink->createDatabase('example.com', 'testuser', 'password123');
         $this->assertTrue($result);
     }
 
@@ -635,7 +635,7 @@ class DropletManagerTest extends TestCase
             ->willReturn(false);
 
         // Call createDatabase and check that it returns false
-        $result = $this->dropletManagerWithCyberLink->createDatabase('example.com', 'testuser', 'password123');
+        $result = $this->managerWithCyberLink->createDatabase('example.com', 'testuser', 'password123');
         $this->assertFalse($result);
     }
 
@@ -648,7 +648,7 @@ class DropletManagerTest extends TestCase
             ->willThrowException(new \Exception('Database creation failed'));
 
         // Call createDatabase and check that it returns false when an exception is thrown
-        $result = $this->dropletManagerWithCyberLink->createDatabase('example.com', 'testuser', 'password123');
+        $result = $this->managerWithCyberLink->createDatabase('example.com', 'testuser', 'password123');
         $this->assertFalse($result);
     }
 
@@ -661,7 +661,7 @@ class DropletManagerTest extends TestCase
             ->willReturn(true);
 
         // Call dropDatabase and check that it returns true
-        $result = $this->dropletManagerWithCyberLink->dropDatabase('example.com', 'testuser');
+        $result = $this->managerWithCyberLink->dropDatabase('example.com', 'testuser');
         $this->assertTrue($result);
     }
 
@@ -674,7 +674,7 @@ class DropletManagerTest extends TestCase
             ->willReturn(false);
 
         // Call dropDatabase and check that it returns false
-        $result = $this->dropletManagerWithCyberLink->dropDatabase('example.com', 'testuser');
+        $result = $this->managerWithCyberLink->dropDatabase('example.com', 'testuser');
         $this->assertFalse($result);
     }
 
@@ -687,7 +687,7 @@ class DropletManagerTest extends TestCase
             ->willThrowException(new \Exception('Database deletion failed'));
 
         // Call dropDatabase and check that it returns false when an exception is thrown
-        $result = $this->dropletManagerWithCyberLink->dropDatabase('example.com', 'testuser');
+        $result = $this->managerWithCyberLink->dropDatabase('example.com', 'testuser');
         $this->assertFalse($result);
     }
 
@@ -703,7 +703,7 @@ class DropletManagerTest extends TestCase
             ->willReturn('');  // An empty string typically indicates success for MySQL commands
 
         // Call the method
-        $result = $this->dropletManager->grantRemoteDatabaseAccess('example.com', 'testuser', 'password123');
+        $result = $this->manager->grantRemoteDatabaseAccess('example.com', 'testuser', 'password123');
 
         // Assert that the method returns true on success
         $this->assertTrue($result);
@@ -720,7 +720,7 @@ class DropletManagerTest extends TestCase
             ->willThrowException(new \Exception('MySQL error'));
 
         // Call the method
-        $result = $this->dropletManager->grantRemoteDatabaseAccess('example.com', 'testuser', 'password123');
+        $result = $this->manager->grantRemoteDatabaseAccess('example.com', 'testuser', 'password123');
 
         // Assert that the method returns false on failure
         $this->assertFalse($result);
@@ -746,7 +746,7 @@ class DropletManagerTest extends TestCase
             ->willReturn('');
 
         // Call the method with a domain name that needs sanitization
-        $result = $this->dropletManager->grantRemoteDatabaseAccess($domainName, $username, $password);
+        $result = $this->manager->grantRemoteDatabaseAccess($domainName, $username, $password);
 
         // Assert that the method returns true
         $this->assertTrue($result);
@@ -762,7 +762,7 @@ class DropletManagerTest extends TestCase
         $this->expectExceptionMessage('Login failed.');
 
         // Call the method
-        $this->dropletManager->grantRemoteDatabaseAccess('example.com', 'testuser', 'password123');
+        $this->manager->grantRemoteDatabaseAccess('example.com', 'testuser', 'password123');
     }
 
     public function testSetUserPasswordSshSuccess()
@@ -779,7 +779,7 @@ class DropletManagerTest extends TestCase
             );
 
         // Call the method
-        $result = $this->dropletManager->setUserPasswordSsh('example.com', 'newpassword');
+        $result = $this->manager->setUserPasswordSsh('example.com', 'newpassword');
 
         // Assert
         $this->assertTrue($result);
@@ -795,7 +795,7 @@ class DropletManagerTest extends TestCase
         $this->expectExceptionMessage('Login failed.');
 
         // Call the method
-        $this->dropletManager->setUserPasswordSsh('example.com', 'newpassword');
+        $this->manager->setUserPasswordSsh('example.com', 'newpassword');
     }
 
     public function testSetUserPasswordSshFailsOnGetLinuxUserForDomain()
@@ -806,7 +806,7 @@ class DropletManagerTest extends TestCase
             ->willReturn('');  // Empty response from getLinuxUserForDomain
 
         // Call the method
-        $result = $this->dropletManager->setUserPasswordSsh('example.com', 'newpassword');
+        $result = $this->manager->setUserPasswordSsh('example.com', 'newpassword');
 
         // Assert
         $this->assertFalse($result);
@@ -824,7 +824,7 @@ class DropletManagerTest extends TestCase
             );
 
         // Call the method
-        $result = $this->dropletManager->setUserPasswordSsh('example.com', 'newpassword');
+        $result = $this->manager->setUserPasswordSsh('example.com', 'newpassword');
 
         // Assert
         $this->assertFalse($result);
@@ -842,7 +842,7 @@ class DropletManagerTest extends TestCase
             );
 
         // Call the method with verifyChange set to false
-        $result = $this->dropletManager->setUserPasswordSsh('example.com', 'newpassword', false);
+        $result = $this->manager->setUserPasswordSsh('example.com', 'newpassword', false);
 
         // Assert
         $this->assertTrue($result);
@@ -861,7 +861,7 @@ class DropletManagerTest extends TestCase
             );
 
         // Call the method
-        $result = $this->dropletManager->setUserPasswordSsh('example.com', 'newpassword');
+        $result = $this->manager->setUserPasswordSsh('example.com', 'newpassword');
 
         // Assert
         $this->assertTrue($result);  // The method still returns true even if verification fails
@@ -878,7 +878,7 @@ class DropletManagerTest extends TestCase
         $this->sshMock->method('exec')->willReturn('');  // Simulate success by returning an empty string
 
         // Call the method and assert that it returns true on success
-        $result = $this->dropletManager->enableSymlinksForDomain($domainName);
+        $result = $this->manager->enableSymlinksForDomain($domainName);
         $this->assertTrue($result);
     }
 
@@ -893,7 +893,7 @@ class DropletManagerTest extends TestCase
         $this->sshMock->method('exec')->willReturn(false);
 
         // Call the method and assert that it returns false on command failure
-        $result = $this->dropletManager->enableSymlinksForDomain($domainName);
+        $result = $this->manager->enableSymlinksForDomain($domainName);
         $this->assertFalse($result);
     }
 
@@ -909,7 +909,7 @@ class DropletManagerTest extends TestCase
         $this->expectExceptionMessage('Login failed.');
 
         // Call the method
-        $this->dropletManager->enableSymlinksForDomain($domainName);
+        $this->manager->enableSymlinksForDomain($domainName);
     }
 
     public function testRestartLiteSpeedSuccess()
@@ -921,7 +921,7 @@ class DropletManagerTest extends TestCase
             ->willReturn('[OK] Send SIGUSR1 to 80579');
 
         // Call the method
-        $result = $this->dropletManagerWithCyberLink->restartLiteSpeed();
+        $result = $this->managerWithCyberLink->restartLiteSpeed();
 
         // Assert that the result matches the expected format
         $this->assertMatchesRegularExpression('/^\[OK\] Send SIGUSR1 to \d+$/', $result);
@@ -937,7 +937,7 @@ class DropletManagerTest extends TestCase
             ->willReturn('[ERROR] Failed to restart LiteSpeed');
 
         // Call the method
-        $result = $this->dropletManagerWithCyberLink->restartLiteSpeed();
+        $result = $this->managerWithCyberLink->restartLiteSpeed();
 
         // Assert that the result contains an error message
         $this->assertStringStartsWith('[ERROR]', $result);
@@ -956,6 +956,6 @@ class DropletManagerTest extends TestCase
         $this->expectExceptionMessage('Connection failed');
 
         // Call the method
-        $this->dropletManagerWithCyberLink->restartLiteSpeed();
+        $this->managerWithCyberLink->restartLiteSpeed();
     }
 }
