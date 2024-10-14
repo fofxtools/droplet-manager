@@ -11,9 +11,9 @@ $cyberLink = $manager->connectCyberLink();
 //print_r($manager->getWebsites());
 $manager->verifyConnectionSsh();
 
-//$domain = 'iffduruguay.org';
-$domain = 'example.com';
-$ip     = '137.184.202.167';
+$domain = 'iffduruguay.org';
+//$domain = 'example.com';
+$ip = '137.184.202.167';
 //$manager->configureDns($domain, $ip);
 
 //$linuxUser = $manager->getLinuxUserForDomain($domain);
@@ -33,3 +33,5 @@ $ip     = '137.184.202.167';
 //$manager->enableSymlinksForDomain($domain);
 
 //echo $manager->restartLiteSpeed();
+
+//var_dump($manager->updateNameserversNamecheap($domain));

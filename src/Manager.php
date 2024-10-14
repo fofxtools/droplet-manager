@@ -7,6 +7,8 @@ use DigitalOceanV2\Client as DigitalOceanClient;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
 use Monolog\Level;
+use Namecheap\Api as NamecheapApi;
+use Namecheap\Domain\DomainsDns;
 
 /**
  * Manager class
@@ -25,6 +27,7 @@ class Manager
     private $digitalOceanClientIsAuthenticated = false;
     private $cyberLinkConnection;
     private Logger $logger;
+    private $namecheapApi;
 
     /**
      * Constructor: Retrieve the configuration for DigitalOcean droplet management.
@@ -774,5 +777,66 @@ EOF',
         $cyber = $this->connectCyberLink();
 
         return $cyber->restartLiteSpeed();
+    }
+
+    /**
+     * Updates the nameservers on Namecheap for a given domain.
+     *
+     * The IP of the server this script is running on, must be whitelisted for the Namecheap API.
+     * To do this, go to Account>Profile>Tools>Business & Dev Tools>Namecheap API Access>Manage.
+     * And edit the Whitelisted IPs.
+     *
+     * @param string            $domain       The domain name to update.
+     * @param bool              $sandbox      Whether to use Namecheap's sandbox environment.
+     * @param NamecheapApi|null $namecheapApi Optional injected NamecheapApi instance. For testing.
+     * @param DomainsDns|null   $domainsDns   Optional injected DomainsDns instance. For testing.
+     *
+     * @return bool True on success, false otherwise.
+     */
+    public function updateNameserversNamecheap(
+        string $domain,
+        bool $sandbox = false,
+        ?NamecheapApi $namecheapApi = null,
+        ?DomainsDns $domainsDns = null
+    ): bool {
+        // Use the provided NamecheapApi instance, the stored instance, or create a new one
+        if ($namecheapApi) {
+            $this->namecheapApi = $namecheapApi;
+        } elseif ($this->namecheapApi === null) {
+            $user     = $username = $this->config['namecheap']['username'];
+            $key      = $this->config['namecheap']['token'];
+            $clientIp = '127.0.0.1';
+
+            $this->namecheapApi = new NamecheapApi($user, $key, $username, $clientIp, 'json');
+        }
+
+        // Enable sandbox mode if requested
+        if ($sandbox) {
+            $this->namecheapApi->enableSandbox();
+        }
+
+        list($sld, $tld) = explode('.', $domain, 2);
+
+        // Use the injected DomainsDns instance, or create a new one if none is provided
+        $domainsDns = $domainsDns ?? new DomainsDns($this->namecheapApi);
+
+        $response = $domainsDns->setCustom($sld, $tld, 'ns1.digitalocean.com,ns2.digitalocean.com,ns3.digitalocean.com');
+
+        // Decode the response if it is a JSON string
+        if (is_string($response)) {
+            $response = json_decode($response);
+        }
+
+        // Check for errors in the API response
+        if (isset($response->ApiResponse->Errors->Error) || ($response->ApiResponse->_Status ?? '') === 'ERROR') {
+            $errorMessage = $response->ApiResponse->Errors->Error->__text ?? 'Unknown error';
+            $this->logger->error("Error updating nameservers for {$domain}: {$errorMessage}");
+
+            return false;
+        }
+
+        $this->logger->info("Successfully updated nameservers for {$domain}");
+
+        return true;
     }
 }

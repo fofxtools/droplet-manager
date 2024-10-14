@@ -11,7 +11,8 @@ use DigitalOceanV2\Api\Droplet;
 use DigitalOceanV2\Exception\ResourceNotFoundException;
 use FOfX\DropletManager\CyberLink;
 use Monolog\Logger;
-use Monolog\Handler\NullHandler;
+use Namecheap\Api as NamecheapApi;
+use Namecheap\Domain\DomainsDns;
 
 /**
  * Unit tests for the Manager class.
@@ -27,6 +28,9 @@ class ManagerTest extends TestCase
     private $managerWithCyberApi;
     private $managerWithCyberLink;
     private $sshMock;
+    private $mockLogger;
+    private $mockNamecheapApi;
+    private $domainsDnsMock;
 
     /**
      * Setup the Manager instance with a mock configuration before each test.
@@ -60,15 +64,14 @@ class ManagerTest extends TestCase
             ],
         ];
 
-        // Create a Logger with a NullHandler for testing
-        $logger = new Logger('test');
-        $logger->pushHandler(new NullHandler());
-
-        // Mock the CyberApi dependency
-        $this->cyberApiMock = $this->createMock(CyberApi::class);
+        // Mock classes
+        $this->mockLogger       = $this->createMock(Logger::class);
+        $this->cyberApiMock     = $this->createMock(CyberApi::class);
+        $this->mockNamecheapApi = $this->createMock(NamecheapApi::class);
+        $this->domainsDnsMock   = $this->createMock(DomainsDns::class);
 
         // Create a Manager instance with the mocked client and configuration
-        $this->manager = new Manager('test-droplet', $this->mockConfig, $this->mockClient, $logger);
+        $this->manager = new Manager('test-droplet', $this->mockConfig, $this->mockClient, $this->mockLogger);
 
         // Mock the SSH2 class
         $this->sshMock = $this->createMock(SSH2::class);
@@ -957,5 +960,72 @@ class ManagerTest extends TestCase
 
         // Call the method
         $this->managerWithCyberLink->restartLiteSpeed();
+    }
+
+    public function testUpdateNameserversNamecheapSuccess()
+    {
+        // Set up the expectation for logging
+        $this->mockLogger->expects($this->once())
+            ->method('info')
+            ->with($this->stringContains('Successfully updated nameservers'));
+
+        // Mock a successful API response
+        $response = (object)[
+            'ApiResponse' => (object)['_Status' => 'OK'],
+        ];
+
+        $this->domainsDnsMock->method('setCustom')->willReturn($response);
+
+        // Run the method with the mocked DomainsDns
+        $result = $this->manager->updateNameserversNamecheap('example.com', false, $this->mockNamecheapApi, $this->domainsDnsMock);
+
+        // Verify result is true for success
+        $this->assertTrue($result);
+    }
+
+    public function testUpdateNameserversNamecheapApiError()
+    {
+        // Set up the expectation for logging
+        $this->mockLogger->expects($this->once())
+            ->method('error')
+            ->with($this->stringContains('Error updating nameservers'));
+
+        // Mock an error response from the API
+        $response = (object)[
+            'ApiResponse' => (object)[
+                '_Status' => 'ERROR',
+                'Errors'  => (object)[
+                    'Error' => (object)['__text' => 'Parameter Nameservers is Missing'],
+                ],
+            ],
+        ];
+
+        $this->domainsDnsMock->method('setCustom')->willReturn($response);
+
+        // Run the method with the mocked DomainsDns
+        $result = $this->manager->updateNameserversNamecheap('example.com', false, $this->mockNamecheapApi, $this->domainsDnsMock);
+
+        // Verify result is false for error
+        $this->assertFalse($result);
+    }
+
+    public function testUpdateNameserversNamecheapUsesSandbox()
+    {
+        // Mock a successful API response
+        $response = (object)[
+            'ApiResponse' => (object)['_Status' => 'OK'],
+        ];
+
+        $this->domainsDnsMock->method('setCustom')->willReturn($response);
+
+        // Inject the mock NamecheapApi with sandbox enabled
+        $sandboxApi = $this->createMock(NamecheapApi::class);
+        $sandboxApi->expects($this->once())->method('enableSandbox');
+
+        // Run the method with the sandbox API and mocked DomainsDns
+        $result = $this->manager->updateNameserversNamecheap('example.com', true, $sandboxApi, $this->domainsDnsMock);
+
+        // Assert result is true for success
+        $this->assertTrue($result);
     }
 }
