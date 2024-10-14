@@ -268,37 +268,101 @@ class ManagerTest extends TestCase
     public function testCreateDropletSuccess()
     {
         // Simulate droplet creation and status polling
-        $createdDroplet = (object) ['id' => 12345];
-        $dropletInfo    = (object) [
-            'status'   => 'active',
-            'name'     => 'test-droplet',
-            'networks' => [(object) ['ipAddress' => '192.168.1.1']],
-        ];
+        $createdDroplet = new \DigitalOceanV2\Entity\Droplet(['id' => 451617062]);
+
+        $networkV4Public = new \DigitalOceanV2\Entity\Network([
+            'ipAddress' => '68.183.146.101',
+            'netmask'   => '255.255.240.0',
+            'gateway'   => '68.183.144.1',
+            'type'      => 'public',
+        ]);
+
+        $networkV4Private = new \DigitalOceanV2\Entity\Network([
+            'ipAddress' => '10.108.0.2',
+            'netmask'   => '255.255.240.0',
+            'gateway'   => '10.108.0.1',
+            'type'      => 'private',
+        ]);
+
+        $dropletInfo = new \DigitalOceanV2\Entity\Droplet([
+            'id'        => 451617062,
+            'name'      => 'temp-droplet',
+            'status'    => 'active',
+            'memory'    => 1024,
+            'vcpus'     => 1,
+            'disk'      => 25,
+            'region'    => new \DigitalOceanV2\Entity\Region(['slug' => 'nyc3']),
+            'image'     => new \DigitalOceanV2\Entity\Image(['slug' => 'litespeedtechnol-cyberpanel-20-04']),
+            'size'      => new \DigitalOceanV2\Entity\Size(['slug' => 's-1vcpu-1gb']),
+            'sizeSlug'  => 's-1vcpu-1gb',
+            'createdAt' => '2024-10-14T17:31:43Z',
+            'networks'  => (object)[
+                'v4' => [$networkV4Public, $networkV4Private],
+                'v6' => [],
+            ],
+            'tags'     => [],
+            'features' => ['monitoring', 'droplet_agent', 'private_networking'],
+            'vpcUuid'  => '2dcddc3e-f4e3-4ec4-8397-0479d7415ec2',
+            'kernel'   => null,
+        ]);
 
         $this->mockDropletApi->method('create')->willReturn($createdDroplet);
         $this->mockDropletApi->method('getById')->willReturn($dropletInfo);
 
-        // Call createDroplet and expect the IP address to be returned
-        $ipAddress = $this->manager->createDroplet('test-droplet', 'nyc3', 's-1vcpu-1gb');
+        // Call createDroplet and expect an array to be returned
+        $result = $this->manager->createDroplet('temp-droplet', 'nyc3', 's-1vcpu-1gb');
 
-        // Check if the IP address is correct
-        $this->assertEquals('192.168.1.1', $ipAddress);
+        // Expected result after processing in Manager.php
+        $expectedResult = [
+            'id'        => 451617062,
+            'name'      => 'temp-droplet',
+            'status'    => 'active',
+            'memory'    => 1024,
+            'vcpus'     => 1,
+            'disk'      => 25,
+            'region'    => 'nyc3',
+            'image'     => 'litespeedtechnol-cyberpanel-20-04',
+            'size'      => 's-1vcpu-1gb',
+            'createdAt' => '2024-10-14T17:31:43Z',
+            'networks'  => [
+                [
+                    'ipAddress' => '68.183.146.101',
+                    'type'      => 'public',
+                    'netmask'   => '255.255.240.0',
+                    'gateway'   => '68.183.144.1',
+                ],
+                [
+                    'ipAddress' => '10.108.0.2',
+                    'type'      => 'private',
+                    'netmask'   => '255.255.240.0',
+                    'gateway'   => '10.108.0.1',
+                ],
+            ],
+            'tags'     => [],
+            'features' => ['monitoring', 'droplet_agent', 'private_networking'],
+            'vpcUuid'  => '2dcddc3e-f4e3-4ec4-8397-0479d7415ec2',
+            'kernel'   => null,
+        ];
+
+        // Check if the result matches the expected array
+        $this->assertEquals($expectedResult, $result);
     }
 
     public function testCreateDropletTimeout()
     {
         // Simulate droplet creation and timeout (droplet never becomes active)
-        $createdDroplet = (object) ['id' => 12345];
-        $dropletInfo    = (object) ['status' => 'new'];  // Droplet status never becomes 'active'
+        $createdDroplet = new \DigitalOceanV2\Entity\Droplet(['id' => 12345]);
+        // Droplet status never becomes 'active'
+        $dropletInfo = new \DigitalOceanV2\Entity\Droplet(['status' => 'new']);
 
         $this->mockDropletApi->method('create')->willReturn($createdDroplet);
-        $this->mockDropletApi->method('getById')->willReturnOnConsecutiveCalls(...array_fill(0, 35, $dropletInfo));
+        $this->mockDropletApi->method('getById')->willReturnOnConsecutiveCalls(...array_fill(0, 30, $dropletInfo));
 
         // Call createDroplet with a very short sleep duration
-        $ipAddress = $this->manager->createDroplet('test-droplet', 'nyc3', 's-1vcpu-1gb', 0.001);
+        $result = $this->manager->createDroplet('test-droplet', 'nyc3', 's-1vcpu-1gb', 0.001);
 
         // Expect null because of timeout
-        $this->assertNull($ipAddress);
+        $this->assertNull($result);
     }
 
     public function testConnectCyberLinkSuccess(): void
@@ -970,17 +1034,17 @@ class ManagerTest extends TestCase
             ->with($this->stringContains('Successfully updated nameservers'));
 
         // Mock a successful API response
-        $response = (object)[
-            'ApiResponse' => (object)['_Status' => 'OK'],
-        ];
+        $response = json_encode([
+            'ApiResponse' => ['_Status' => 'OK'],
+        ]);
 
         $this->domainsDnsMock->method('setCustom')->willReturn($response);
 
         // Run the method with the mocked DomainsDns
         $result = $this->manager->updateNameserversNamecheap('example.com', false, $this->mockNamecheapApi, $this->domainsDnsMock);
 
-        // Verify result is true for success
-        $this->assertTrue($result);
+        // Verify result is the expected response
+        $this->assertSame($response, $result);
     }
 
     public function testUpdateNameserversNamecheapApiError()
@@ -991,30 +1055,30 @@ class ManagerTest extends TestCase
             ->with($this->stringContains('Error updating nameservers'));
 
         // Mock an error response from the API
-        $response = (object)[
-            'ApiResponse' => (object)[
+        $response = json_encode([
+            'ApiResponse' => [
                 '_Status' => 'ERROR',
-                'Errors'  => (object)[
-                    'Error' => (object)['__text' => 'Parameter Nameservers is Missing'],
+                'Errors'  => [
+                    'Error' => ['__text' => 'Parameter Nameservers is Missing'],
                 ],
             ],
-        ];
+        ]);
 
         $this->domainsDnsMock->method('setCustom')->willReturn($response);
 
         // Run the method with the mocked DomainsDns
         $result = $this->manager->updateNameserversNamecheap('example.com', false, $this->mockNamecheapApi, $this->domainsDnsMock);
 
-        // Verify result is false for error
-        $this->assertFalse($result);
+        // Verify result is the error response
+        $this->assertSame($response, $result);
     }
 
     public function testUpdateNameserversNamecheapUsesSandbox()
     {
         // Mock a successful API response
-        $response = (object)[
-            'ApiResponse' => (object)['_Status' => 'OK'],
-        ];
+        $response = json_encode([
+            'ApiResponse' => ['_Status' => 'OK'],
+        ]);
 
         $this->domainsDnsMock->method('setCustom')->willReturn($response);
 
@@ -1025,7 +1089,24 @@ class ManagerTest extends TestCase
         // Run the method with the sandbox API and mocked DomainsDns
         $result = $this->manager->updateNameserversNamecheap('example.com', true, $sandboxApi, $this->domainsDnsMock);
 
-        // Assert result is true for success
-        $this->assertTrue($result);
+        // Assert result is the expected response
+        $this->assertSame($response, $result);
+    }
+
+    public function testUpdateNameserversNamecheapApiCallFailed()
+    {
+        // Set up the expectation for logging
+        $this->mockLogger->expects($this->once())
+            ->method('error')
+            ->with($this->stringContains('Error updating nameservers'));
+
+        // Mock a failed API call
+        $this->domainsDnsMock->method('setCustom')->willReturn(false);
+
+        // Run the method with the mocked DomainsDns
+        $result = $this->manager->updateNameserversNamecheap('example.com', false, $this->mockNamecheapApi, $this->domainsDnsMock);
+
+        // Verify result is false
+        $this->assertFalse($result);
     }
 }

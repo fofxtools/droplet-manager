@@ -210,8 +210,8 @@ class Manager
      *
      * This method authenticates the user with the DigitalOcean API, creates a new droplet
      * with the specified name, region, and size, and monitors the droplet's status until
-     * it becomes active. The server's IP address is returned once the droplet is ready.
-     * If the creation process times out, a message is displayed.
+     * it becomes active. The droplet's information is returned once it's ready.
+     * If the creation process times out, null is returned.
      *
      * @param string $name          The name of the droplet to create.
      * @param string $region        The region where the droplet will be created.
@@ -220,9 +220,9 @@ class Manager
      *
      * @throws \Exception If the DigitalOcean configuration is missing or any error occurs.
      *
-     * @return ?string Returns the droplet's IP address if created successfully, null otherwise.
+     * @return ?array Returns the droplet's information if created successfully, null otherwise.
      */
-    public function createDroplet(string $name, string $region, string $size, float $sleepDuration = 5.0): ?string
+    public function createDroplet(string $name, string $region, string $size, float $sleepDuration = 5.0): ?array
     {
         // Track the start time with microsecond precision
         $startTime = microtime(true);
@@ -238,7 +238,7 @@ class Manager
         $this->logger->info('Launching the server, please wait...');
 
         // Poll the droplet's status until it's active
-        for ($i = 0; $i < 35; $i++) {
+        for ($i = 0; $i < 30; $i++) {
             $dropletInfo = $dropletApi->getById($createdDroplet->id);
             if ($dropletInfo->status === 'active') {
                 $duration = round(microtime(true) - $startTime, 2);
@@ -247,7 +247,32 @@ class Manager
                 $this->logger->info('The server IP is: ' . $dropletInfo->networks[0]->ipAddress);
                 $this->logger->info("Droplet creation took {$duration} seconds.");
 
-                return $dropletInfo->networks[0]->ipAddress;
+                // Return the droplet info as an array
+                $dropletInfoArray = [
+                    'id'        => $dropletInfo->id,
+                    'name'      => $dropletInfo->name,
+                    'status'    => $dropletInfo->status,
+                    'memory'    => $dropletInfo->memory,
+                    'vcpus'     => $dropletInfo->vcpus,
+                    'disk'      => $dropletInfo->disk,
+                    'region'    => $dropletInfo->region->slug,
+                    'image'     => $dropletInfo->image->slug,
+                    'kernel'    => $dropletInfo->kernel ? $dropletInfo->kernel->id : null,
+                    'size'      => $dropletInfo->size->slug,
+                    'createdAt' => $dropletInfo->createdAt,
+                    'networks'  => array_map(fn ($network) => [
+                        'ipAddress' => $network->ipAddress,
+                        'type'      => $network->type,
+                        'netmask'   => $network->netmask,
+                        'gateway'   => $network->gateway,
+                    ], $dropletInfo->networks),
+                    'tags'     => $dropletInfo->tags,
+                    'features' => $dropletInfo->features,
+                    'vpcUuid'  => $dropletInfo->vpcUuid,
+                ];
+
+                // The public IP should be: $dropletInfoArray['networks'][0]['ipAddress'];
+                return $dropletInfoArray;
             }
             $this->logger->info('...');
             float_sleep($sleepDuration);
@@ -791,14 +816,14 @@ EOF',
      * @param NamecheapApi|null $namecheapApi Optional injected NamecheapApi instance. For testing.
      * @param DomainsDns|null   $domainsDns   Optional injected DomainsDns instance. For testing.
      *
-     * @return bool True on success, false otherwise.
+     * @return string|array|bool Returns the API response.
      */
     public function updateNameserversNamecheap(
         string $domain,
         bool $sandbox = false,
         ?NamecheapApi $namecheapApi = null,
         ?DomainsDns $domainsDns = null
-    ): bool {
+    ): string|array|bool {
         // Use the provided NamecheapApi instance, the stored instance, or create a new one
         if ($namecheapApi) {
             $this->namecheapApi = $namecheapApi;
@@ -822,21 +847,22 @@ EOF',
 
         $response = $domainsDns->setCustom($sld, $tld, 'ns1.digitalocean.com,ns2.digitalocean.com,ns3.digitalocean.com');
 
-        // Decode the response if it is a JSON string
-        if (is_string($response)) {
-            $response = json_decode($response);
-        }
-
         // Check for errors in the API response
-        if (isset($response->ApiResponse->Errors->Error) || ($response->ApiResponse->_Status ?? '') === 'ERROR') {
-            $errorMessage = $response->ApiResponse->Errors->Error->__text ?? 'Unknown error';
-            $this->logger->error("Error updating nameservers for {$domain}: {$errorMessage}");
-
-            return false;
+        if (is_string($response) || is_array($response)) {
+            // Decode the response if it's a string
+            $decodedResponse = is_string($response) ? json_decode($response, true) : $response;
+            if (isset($decodedResponse['ApiResponse']['Errors']['Error']) || ($decodedResponse['ApiResponse']['_Status'] ?? '') === 'ERROR') {
+                $errorMessage = $decodedResponse['ApiResponse']['Errors']['Error']['__text'] ?? 'Unknown error';
+                $this->logger->error("Error updating nameservers for {$domain}: {$errorMessage}");
+            } else {
+                $this->logger->info("Successfully updated nameservers for {$domain}");
+            }
+        } elseif ($response === false) {
+            $this->logger->error("Error updating nameservers for {$domain}: API call failed");
+        } else {
+            $this->logger->info("Successfully updated nameservers for {$domain}");
         }
 
-        $this->logger->info("Successfully updated nameservers for {$domain}");
-
-        return true;
+        return $response;
     }
 }

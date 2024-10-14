@@ -11,6 +11,12 @@ $cyberLink = $manager->connectCyberLink();
 //print_r($manager->getWebsites());
 $manager->verifyConnectionSsh();
 
+$dropletName = 'temp-droplet';
+$region      = 'nyc3';
+$size        = 's-1vcpu-1gb';
+$dropletInfo = $manager->createDroplet($dropletName, $region, $size);
+var_dump($dropletInfo);
+
 $domain = 'iffduruguay.org';
 //$domain = 'example.com';
 $ip = '137.184.202.167';
