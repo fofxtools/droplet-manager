@@ -9,6 +9,10 @@ use Monolog\Handler\StreamHandler;
 use Monolog\Level;
 use Namecheap\Api as NamecheapApi;
 use Namecheap\Domain\DomainsDns;
+use GoDaddyDomainsClient\Configuration;
+use GoDaddyDomainsClient\ApiClient;
+use GoDaddyDomainsClient\Api\VdomainsApi;
+use GoDaddyDomainsClient\Model\DomainUpdate;
 
 /**
  * Manager class
@@ -28,6 +32,7 @@ class Manager
     private $cyberLinkConnection;
     private Logger $logger;
     private $namecheapApi;
+    private $vdomainsApi;
 
     /**
      * Constructor: Retrieve the configuration for DigitalOcean droplet management.
@@ -864,5 +869,58 @@ EOF',
         }
 
         return $response;
+    }
+
+    /**
+     * Update nameservers for a domain on GoDaddy.
+     *
+     * @param string       $domain
+     * @param ?VdomainsApi $vdomainsApi
+     *
+     * @return bool
+     */
+    public function updateNameserversGodaddy(string $domain, ?VdomainsApi $vdomainsApi = null): bool
+    {
+        // Suppress deprecated warnings due to outdated return type hints in the gellu/godaddy-api-client library,
+        // which are incompatible with PHP 8.1+ ArrayAccess requirements.
+        $oldErrorReporting = error_reporting();
+        error_reporting(E_ALL & ~E_DEPRECATED);
+
+        try {
+            // Use the provided VdomainsApi instance, the stored instance, or create a new one
+            if ($vdomainsApi) {
+                $this->vdomainsApi = $vdomainsApi;
+            } elseif ($this->vdomainsApi === null) {
+                $key    = $this->config['godaddy']['api_key'] ?? null;
+                $secret = $this->config['godaddy']['api_secret'] ?? null;
+
+                if (!$key || !$secret) {
+                    $this->logger->error('GoDaddy API credentials are missing from the configuration.');
+
+                    return false;
+                }
+
+                $configuration = new Configuration();
+                $configuration->addDefaultHeader('Authorization', "sso-key {$key}:{$secret}");
+                $apiClient         = new ApiClient($configuration);
+                $this->vdomainsApi = new VdomainsApi($apiClient);
+            }
+
+            $nameservers = ['ns1.digitalocean.com', 'ns2.digitalocean.com', 'ns3.digitalocean.com'];
+            $body        = new DomainUpdate();
+            $body->setNameservers($nameservers);
+
+            $this->vdomainsApi->update($domain, $body);
+            $this->logger->info("Nameservers updated successfully for domain {$domain}");
+
+            return true;
+        } catch (\Exception $e) {
+            $this->logger->error('Error when calling VdomainsApi->update: ' . $e->getMessage());
+
+            return false;
+        } finally {
+            // Always restore the previous error reporting level
+            error_reporting($oldErrorReporting);
+        }
     }
 }

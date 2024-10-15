@@ -62,6 +62,14 @@ class ManagerTest extends TestCase
                 'cyberpanel_admin'    => 'admin',
                 'cyberpanel_password' => 'admin123',
             ],
+            'namecheap' => [
+                'username' => 'mock-username',
+                'token'    => 'mock-token',
+            ],
+            'godaddy' => [
+                'api_key'    => 'mock-api-key',
+                'api_secret' => 'mock-api-secret',
+            ],
         ];
 
         // Mock classes
