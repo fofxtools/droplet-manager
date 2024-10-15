@@ -1117,4 +1117,93 @@ class ManagerTest extends TestCase
         // Verify result is false
         $this->assertFalse($result);
     }
+
+    public function testUpdateNameserversGodaddySuccess()
+    {
+        $domain      = 'example.com';
+        $nameservers = ['ns1.example.com', 'ns2.example.com', 'ns3.example.com'];
+
+        // Mock the Guzzle client
+        $mockClient   = $this->createMock(\GuzzleHttp\Client::class);
+        $mockResponse = $this->createMock(\Psr\Http\Message\ResponseInterface::class);
+
+        // Simulate a successful response
+        $mockResponse->method('getStatusCode')->willReturn(200);
+        $mockClient->expects($this->once())
+            ->method('put')
+            ->with("/v1/domains/{$domain}/records/NS/@", ['json' => [
+                ['data' => 'ns1.example.com'],
+                ['data' => 'ns2.example.com'],
+                ['data' => 'ns3.example.com'],
+            ]])
+            ->willReturn($mockResponse);
+
+        $this->mockLogger->expects($this->once())
+            ->method('info')
+            ->with("Nameservers updated successfully for domain {$domain}");
+
+        $result = $this->manager->updateNameserversGodaddy($domain, $nameservers, $mockClient);
+        $this->assertTrue($result);
+    }
+
+    public function testUpdateNameserversGodaddyClientError()
+    {
+        $domain      = 'example.com';
+        $nameservers = ['ns1.example.com', 'ns2.example.com', 'ns3.example.com'];
+
+        $mockClient   = $this->createMock(\GuzzleHttp\Client::class);
+        $mockResponse = $this->createMock(\Psr\Http\Message\ResponseInterface::class);
+        $mockStream   = $this->createMock(\Psr\Http\Message\StreamInterface::class);
+
+        $mockStream->method('__toString')->willReturn('Not Found');
+        $mockResponse->method('getStatusCode')->willReturn(404);
+        $mockResponse->method('getBody')->willReturn($mockStream);
+
+        $mockClient->expects($this->once())
+            ->method('put')
+            ->willReturn($mockResponse);
+
+        $this->mockLogger->expects($this->once())
+            ->method('error')
+            ->with("Failed to update nameservers for domain {$domain}: Not Found");
+
+        $result = $this->manager->updateNameserversGodaddy($domain, $nameservers, $mockClient);
+        $this->assertFalse($result);
+    }
+
+    public function testUpdateNameserversGodaddyMissingCredentials()
+    {
+        $domain      = 'example.com';
+        $nameservers = ['ns1.example.com', 'ns2.example.com', 'ns3.example.com'];
+
+        // Set up a configuration without GoDaddy credentials
+        $this->mockConfig['godaddy']['api_key']    = null;
+        $this->mockConfig['godaddy']['api_secret'] = null;
+        $manager                                   = new Manager('test-droplet', $this->mockConfig, $this->mockClient, $this->mockLogger);
+
+        $this->mockLogger->expects($this->once())
+            ->method('error')
+            ->with('GoDaddy API credentials are missing from the configuration.');
+
+        $result = $manager->updateNameserversGodaddy($domain, $nameservers);
+        $this->assertFalse($result);
+    }
+
+    public function testUpdateNameserversGodaddyHandlesException()
+    {
+        $domain      = 'example.com';
+        $nameservers = ['ns1.example.com', 'ns2.example.com', 'ns3.example.com'];
+
+        $mockClient = $this->createMock(\GuzzleHttp\Client::class);
+        $mockClient->expects($this->once())
+            ->method('put')
+            ->willThrowException(new \GuzzleHttp\Exception\RequestException('Request failed', new \GuzzleHttp\Psr7\Request('PUT', 'test')));
+
+        $this->mockLogger->expects($this->once())
+            ->method('error')
+            ->with("Error updating nameservers for domain {$domain}: Request failed");
+
+        $result = $this->manager->updateNameserversGodaddy($domain, $nameservers, $mockClient);
+        $this->assertFalse($result);
+    }
 }

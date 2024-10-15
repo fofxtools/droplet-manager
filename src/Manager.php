@@ -9,10 +9,8 @@ use Monolog\Handler\StreamHandler;
 use Monolog\Level;
 use Namecheap\Api as NamecheapApi;
 use Namecheap\Domain\DomainsDns;
-use GoDaddyDomainsClient\Configuration;
-use GoDaddyDomainsClient\ApiClient;
-use GoDaddyDomainsClient\Api\VdomainsApi;
-use GoDaddyDomainsClient\Model\DomainUpdate;
+use GuzzleHttp\Client;
+use GuzzleHttp\Exception\GuzzleException;
 
 /**
  * Manager class
@@ -32,7 +30,6 @@ class Manager
     private $cyberLinkConnection;
     private Logger $logger;
     private $namecheapApi;
-    private $vdomainsApi;
 
     /**
      * Constructor: Retrieve the configuration for DigitalOcean droplet management.
@@ -872,55 +869,58 @@ EOF',
     }
 
     /**
-     * Update nameservers for a domain on GoDaddy.
+     * Updates the nameservers on GoDaddy for a given domain.
      *
-     * @param string       $domain
-     * @param ?VdomainsApi $vdomainsApi
+     * @param string      $domain      The domain name to update.
+     * @param array|null  $nameservers The nameservers to set. Defaults to DigitalOcean's nameservers.
+     * @param Client|null $client      Optional injected Guzzle client. For testing.
      *
-     * @return bool
+     * @return bool Returns true if the nameservers were updated successfully, false otherwise.
      */
-    public function updateNameserversGodaddy(string $domain, ?VdomainsApi $vdomainsApi = null): bool
+    public function updateNameserversGodaddy(string $domain, ?array $nameservers = null, ?Client $client = null): bool
     {
-        // Suppress deprecated warnings due to outdated return type hints in the gellu/godaddy-api-client library,
-        // which are incompatible with PHP 8.1+ ArrayAccess requirements.
-        $oldErrorReporting = error_reporting();
-        error_reporting(E_ALL & ~E_DEPRECATED);
+        $nameservers = $nameservers ?? ['ns1.digitalocean.com', 'ns2.digitalocean.com', 'ns3.digitalocean.com'];
 
-        try {
-            // Use the provided VdomainsApi instance, the stored instance, or create a new one
-            if ($vdomainsApi) {
-                $this->vdomainsApi = $vdomainsApi;
-            } elseif ($this->vdomainsApi === null) {
-                $key    = $this->config['godaddy']['api_key'] ?? null;
-                $secret = $this->config['godaddy']['api_secret'] ?? null;
+        $godaddyApiKey    = $this->config['godaddy']['api_key'] ?? null;
+        $godaddyApiSecret = $this->config['godaddy']['api_secret'] ?? null;
 
-                if (!$key || !$secret) {
-                    $this->logger->error('GoDaddy API credentials are missing from the configuration.');
-
-                    return false;
-                }
-
-                $configuration = new Configuration();
-                $configuration->addDefaultHeader('Authorization', "sso-key {$key}:{$secret}");
-                $apiClient         = new ApiClient($configuration);
-                $this->vdomainsApi = new VdomainsApi($apiClient);
-            }
-
-            $nameservers = ['ns1.digitalocean.com', 'ns2.digitalocean.com', 'ns3.digitalocean.com'];
-            $body        = new DomainUpdate();
-            $body->setNameservers($nameservers);
-
-            $this->vdomainsApi->update($domain, $body);
-            $this->logger->info("Nameservers updated successfully for domain {$domain}");
-
-            return true;
-        } catch (\Exception $e) {
-            $this->logger->error('Error when calling VdomainsApi->update: ' . $e->getMessage());
+        if (!$godaddyApiKey || !$godaddyApiSecret) {
+            $this->logger->error('GoDaddy API credentials are missing from the configuration.');
 
             return false;
-        } finally {
-            // Always restore the previous error reporting level
-            error_reporting($oldErrorReporting);
+        }
+
+        $client = $client ?? new Client([
+            'base_uri' => 'https://api.godaddy.com/',
+            'headers'  => [
+                'Authorization' => 'sso-key ' . $godaddyApiKey . ':' . $godaddyApiSecret,
+                'Content-Type'  => 'application/json',
+                'Accept'        => 'application/json',
+            ],
+        ]);
+
+        $data = array_map(function ($ns) {
+            return ['data' => $ns];
+        }, $nameservers);
+
+        try {
+            $response = $client->put("/v1/domains/{$domain}/records/NS/@", [
+                'json' => $data,
+            ]);
+
+            if ($response->getStatusCode() === 200) {
+                $this->logger->info("Nameservers updated successfully for domain {$domain}");
+
+                return true;
+            } else {
+                $this->logger->error("Failed to update nameservers for domain {$domain}: " . $response->getBody());
+
+                return false;
+            }
+        } catch (GuzzleException $e) {
+            $this->logger->error("Error updating nameservers for domain {$domain}: " . $e->getMessage());
+
+            return false;
         }
     }
 }
