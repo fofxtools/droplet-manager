@@ -339,11 +339,27 @@ class Manager
      *
      * This method connects to the droplet using CyberLink and retrieves the list of websites hosted on the droplet.
      *
+     * @param bool $namesOnly If true, the method will return an array of website names only.
+     *
      * @return array An array of website information.
      */
-    public function getWebsites(): array
+    public function getWebsites(bool $namesOnly = true): array
     {
-        return $this->connectCyberLink()->listWebsites();
+        return $this->connectCyberLink()->listWebsites($namesOnly);
+    }
+
+    /**
+     * Get the users on the droplet.
+     *
+     * This method connects to the droplet using CyberLink and retrieves the list of users on the droplet.
+     *
+     * @param bool $namesOnly If true, the method will return an array of user names only.
+     *
+     * @return array An array of user information.
+     */
+    public function getUsers(bool $namesOnly = true): array
+    {
+        return $this->connectCyberLink()->listUsers($namesOnly);
     }
 
     /**
@@ -926,6 +942,100 @@ EOF',
             $this->logger->error("Error updating nameservers for domain {$domain}: " . $e->getMessage());
 
             return false;
+        }
+    }
+
+    public function setupWebsite(array $data): void
+    {
+        // Step 1: Retrieve user and site info
+        $firstName     = $data['firstName'];
+        $lastName      = $data['lastName'];
+        $email         = $data['email'];
+        $username      = $data['username'];
+        $password      = $data['password'];
+        $websitesLimit = $data['websitesLimit'];
+        $domainName    = $data['domainName'];
+        $websiteOwner  = $data['username'];
+        $websiteEmail  = $data['websiteEmail'];
+
+        // Step 2: Verify SSH connection
+        try {
+            $this->verifyConnectionSsh();
+        } catch (\Throwable $th) {
+            $this->logger->error('SSH connection failed: ' . $th->getMessage());
+            exit;
+        }
+
+        // Step 3: Configure DNS
+        $this->logger->info("Configuring DNS for {$domainName}");
+        $this->configureDns($domainName, $this->config[$this->dropletName]['server_ip']);
+        $this->logger->info("DNS configured successfully for {$domainName}");
+
+        // Step 4: Establish CyberLink connection and create user
+        $cyberLink = $this->connectCyberLink();
+        $users     = $cyberLink->listUsers(true);
+        if (in_array($username, $users)) {
+            $this->logger->info("User {$username} already exists");
+        } else {
+            $this->logger->info("Creating user {$username}");
+            if ($cyberLink->createUser($firstName, $lastName, $email, $username, $password, $websitesLimit)) {
+                $this->logger->info("User {$username} created successfully");
+            } else {
+                $this->logger->error("Failed to create user {$username}");
+            }
+        }
+
+        // Step 5: Create Website
+        $websites = $this->getWebsites(true);
+        if (in_array($domainName, $websites)) {
+            $this->logger->info("Website {$domainName} already exists");
+        } else {
+            $this->logger->info("Creating website for domain {$domainName}");
+            if ($cyberLink->createWebsite($domainName, $websiteEmail, $websiteOwner)) {
+                $this->logger->info("Website for {$domainName} created successfully");
+            } else {
+                $this->logger->error("Failed to create website for {$domainName}");
+            }
+        }
+
+        // Step 6: Redirect HTTP to HTTPS
+        $this->logger->info("Redirecting {$domainName} to HTTPS");
+        if ($this->createHtaccessForHttpsRedirect($domainName)) {
+            $this->logger->info("HTTPS redirection configured for {$domainName}");
+        } else {
+            $this->logger->error("Failed to configure HTTPS redirection for {$domainName}");
+        }
+
+        // Step 7: Create Database
+        $this->logger->info("Creating database for {$domainName}");
+        if ($this->createDatabase($domainName, $username, $password)) {
+            $this->logger->info("Database for {$domainName} created successfully");
+        } else {
+            $this->logger->error("Failed to create database for {$domainName}");
+        }
+
+        // Step 8: Enable Database External Access
+        $this->logger->info("Enabling external access to the database for {$username}");
+        if ($this->grantRemoteDatabaseAccess($domainName, $username, $password)) {
+            $this->logger->info("External database access granted for {$username}");
+        } else {
+            $this->logger->error("Failed to grant external access to the database for {$username}");
+        }
+
+        // Step 9: Set SFTP/SSH Access
+        $this->logger->info("Setting user {$username} SSH password for domain {$domainName}");
+        if ($this->setUserPasswordSsh($domainName, $password)) {
+            $this->logger->info("User {$username} SSH password set for {$domainName}");
+        } else {
+            $this->logger->error("Failed to set {username} SSH password for {$domainName}");
+        }
+
+        // Step 10: Unrestrain Symbolic Links
+        $this->logger->info("Unrestraining symbolic links for {$domainName}");
+        if ($this->enableSymlinksForDomain($domainName)) {
+            $this->logger->info("Symbolic links unrestrained for {$domainName}");
+        } else {
+            $this->logger->error("Failed to unrestrain symbolic links for {$domainName}");
         }
     }
 }

@@ -524,6 +524,78 @@ class ManagerTest extends TestCase
         $this->managerWithCyberLink->getWebsites();
     }
 
+    /**
+     * Test getUsers returns an array of users.
+     */
+    public function testGetUsersReturnsArray()
+    {
+        $this->setUpWithCyberLink();
+
+        // Mock the listUsers() method to return a sample array of users
+        $this->cyberLinkMock->method('listUsers')->willReturn([
+            ['username' => 'user1', 'email' => 'user1@example.com'],
+            ['username' => 'user2', 'email' => 'user2@example.com'],
+        ]);
+
+        // Call getUsers and check that the result is as expected
+        $result = $this->managerWithCyberLink->getUsers();
+
+        $this->assertIsArray($result);
+        $this->assertCount(2, $result);
+        $this->assertEquals('user1', $result[0]['username']);
+        $this->assertEquals('user1@example.com', $result[0]['email']);
+    }
+
+    /**
+     * Test getUsers handles empty array.
+     */
+    public function testGetUsersHandlesEmptyArray()
+    {
+        $this->setUpWithCyberLink();
+
+        // Mock the listUsers() method to return an empty array
+        $this->cyberLinkMock->method('listUsers')->willReturn([]);
+
+        // Call getUsers and check that the result is an empty array
+        $result = $this->managerWithCyberLink->getUsers();
+
+        $this->assertIsArray($result);
+        $this->assertEmpty($result);
+    }
+
+    /**
+     * Test getUsers handles exceptions.
+     */
+    public function testGetUsersHandlesException()
+    {
+        $this->setUpWithCyberLink();
+
+        // Mock the listUsers() method to throw an exception
+        $this->cyberLinkMock->method('listUsers')->willThrowException(new \Exception('Connection failed'));
+
+        // Call getUsers and check that an exception is thrown and handled
+        $this->expectException(\Exception::class);
+        $this->managerWithCyberLink->getUsers();
+    }
+
+    /**
+     * Test getUsers with namesOnly parameter set to true.
+     */
+    public function testGetUsersWithNamesOnly()
+    {
+        $this->setUpWithCyberLink();
+
+        // Mock the listUsers() method to return an array of usernames
+        $this->cyberLinkMock->method('listUsers')->willReturn(['user1', 'user2', 'user3']);
+
+        // Call getUsers with namesOnly set to true
+        $result = $this->managerWithCyberLink->getUsers(true);
+
+        $this->assertIsArray($result);
+        $this->assertCount(3, $result);
+        $this->assertEquals(['user1', 'user2', 'user3'], $result);
+    }
+
     public function testCreateWebsiteCyberApiSuccess()
     {
         $this->setUpWithCyberApi();

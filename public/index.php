@@ -9,6 +9,7 @@ $manager   = new Manager('test', 'config' . DIRECTORY_SEPARATOR . 'droplet-manag
 $cyberLink = $manager->connectCyberLink();
 
 //print_r($manager->getWebsites());
+//print_r($manager->getUsers());
 $manager->verifyConnectionSsh();
 
 //$domain = 'iffduruguay.org';
@@ -38,3 +39,5 @@ $ip     = '137.184.202.167';
 //var_dump($manager->updateNameserversNamecheap($domain));
 
 //var_dump($manager->updateNameserversGodaddy($domain, ['ns1.digitalocean.com', 'ns2.digitalocean.com', 'ns3.digitalocean.com']));
+
+//print_r($cyberLink->listUsers());

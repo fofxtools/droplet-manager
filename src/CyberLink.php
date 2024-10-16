@@ -100,9 +100,24 @@ class CyberLink
      *
      * @return bool
      */
-    private function parse($str)
+    public function parse($str, bool $endOfString = false, $returnParseData = false)
     {
-        $pattern = '
+        if ($endOfString) {
+            $pattern = '
+/
+\{              # { character
+    (?:         # non-capturing group
+        [^{}]   # anything that is not a { or }
+        |       # OR
+        (?R)    # recurses the entire pattern
+    )*          # previous group zero or more times
+\}              # } character
+\s*             # optional whitespace
+$               # end of string
+/x
+';
+        } else {
+            $pattern = '
 /
 \{              # { character
     (?:         # non-capturing group
@@ -113,25 +128,15 @@ class CyberLink
 \}              # } character
 /x
 ';
+        }
         preg_match($pattern, $str, $json);
-        if (isset($json[0])) {
-            $parseData         = json_decode($json[0]);
-            $this->lastMessage = trim(str_replace($json[0], '', $str));
-
-            if (isset($parseData->error_message) && $parseData->error_message != 'None') {
-                echo $parseData->error_message . PHP_EOL;
-            }
-            if (isset($parseData->errorMessage) && $parseData->errorMessage != 'None') {
-                echo $parseData->errorMessage . PHP_EOL;
-            }
-
-            return $this->getBoolResult($parseData);
+        $parseData = json_decode($json[0]);
+        if ($returnParseData) {
+            return $parseData;
         }
-        if (is_array($json)) {
-            return true;
-        }
+        $this->lastMessage = trim(str_replace($json[0], '', $str));
 
-        return false;
+        return $this->getBoolResult($parseData);
     }
 
     /**
@@ -139,9 +144,12 @@ class CyberLink
      *
      * @return bool
      */
-    private function getBoolResult($result)
+    public function getBoolResult($result)
     {
         if (isset($result->errorMessage) and $result->errorMessage != 'None') {
+            return false;
+        }
+        if (isset($result->error_message) and $result->error_message != 'None') {
             return false;
         }
         if (isset($result->success) and $result->success == 1) {
@@ -356,7 +364,7 @@ EOL;
             throw new Exception('Email cannot be empty!');
         }
 
-        return $this->parse($this->ssh->exec($this->commandBuilder(__FUNCTION__, [
+        $output = $this->ssh->exec($this->commandBuilder(__FUNCTION__, [
             'package'     => $package,
             'owner'       => $owner,
             'domainName'  => $domainName,
@@ -365,7 +373,10 @@ EOL;
             'ssl'         => 1,
             'dkim'        => 1,
             'openBasedir' => 1,
-        ])));
+        ]));
+
+        // Use end_of_string = true because there may be multiple JSON objects in the output
+        return $this->parse($output, true);
     }
 
     /**
@@ -434,9 +445,19 @@ EOL;
     /**
      * @return mixed
      */
-    public function listWebsites()
+    public function listWebsites(bool $namesOnly = false)
     {
-        return json_decode($this->ssh->exec($this->commandBuilder(__FUNCTION__ . 'Json')));
+        $websites = json_decode($this->ssh->exec($this->commandBuilder(__FUNCTION__ . 'Json')));
+        if ($namesOnly) {
+            $names = [];
+            foreach ($websites as $website) {
+                $names[] = $website->domain;
+            }
+
+            return $names;
+        }
+
+        return $websites;
     }
 
     /**
@@ -794,7 +815,7 @@ EOL;
     #endregion
     #endregion
 
-    public function createUser($firstName, $lastName, $email, $username, $password)
+    public function createUser($firstName, $lastName, $email, $username, $password, $websitesLimit = 0)
     {
         if (empty($firstName)) {
             throw new Exception('First name cannot be empty!');
@@ -812,16 +833,18 @@ EOL;
             throw new Exception('Password cannot be empty!');
         }
 
-        return $this->parse($this->ssh->exec($this->commandBuilder(__FUNCTION__, [
+        $output = $this->ssh->exec($this->commandBuilder(__FUNCTION__, [
             'firstName'     => $firstName,
             'lastName'      => $lastName,
             'email'         => $email,
             'userName'      => $username,
             'password'      => $password,
-            'websitesLimit' => 1,
+            'websitesLimit' => $websitesLimit,
             'selectedACL'   => 'user',
             'securityLevel' => 'HIGH',
-        ])));
+        ]));
+
+        return $this->parse($output);
     }
 
     public function deleteUser($userName)
@@ -833,5 +856,27 @@ EOL;
         return $this->parse($this->ssh->exec($this->commandBuilder(__FUNCTION__, [
             'userName' => $userName,
         ])));
+    }
+
+    public function listUsers(bool $namesOnly = false)
+    {
+        $output    = $this->ssh->exec($this->commandBuilder(__FUNCTION__));
+        $parseData = $this->parse($output, false, true);
+
+        if (is_object($parseData) && isset($parseData->data)) {
+            $users = json_decode($parseData->data, true);
+            if ($namesOnly) {
+                $names = [];
+                foreach ($users as $user) {
+                    $names[$user['id']] = $user['name'];
+                }
+
+                return $names;
+            }
+
+            return $users;
+        }
+
+        return [];
     }
 }
