@@ -596,6 +596,102 @@ class ManagerTest extends TestCase
         $this->assertEquals(['user1', 'user2', 'user3'], $result);
     }
 
+    /**
+     * Test getDatabases returns an array of databases.
+     */
+    public function testGetDatabasesReturnsArray()
+    {
+        $this->setUpWithCyberLink();
+
+        $domain        = 'example.com';
+        $mockDatabases = [
+            ['dbName' => 'example_com_db1', 'dbUser' => 'user1'],
+            ['dbName' => 'example_com_db2', 'dbUser' => 'user2'],
+        ];
+
+        // Mock the listDatabases() method to return a sample array of databases
+        $this->cyberLinkMock->method('listDatabases')
+            ->with($domain, true)
+            ->willReturn($mockDatabases);
+
+        // Call getDatabases and check that the result is as expected
+        $result = $this->managerWithCyberLink->getDatabases($domain);
+
+        $this->assertIsArray($result);
+        $this->assertCount(2, $result);
+        $this->assertEquals('example_com_db1', $result[0]['dbName']);
+        $this->assertEquals('user1', $result[0]['dbUser']);
+    }
+
+    /**
+     * Test getDatabases handles empty array.
+     */
+    public function testGetDatabasesHandlesEmptyArray()
+    {
+        $this->setUpWithCyberLink();
+
+        $domain = 'example.com';
+
+        // Mock the listDatabases() method to return an empty array
+        $this->cyberLinkMock->method('listDatabases')
+            ->with($domain, true)
+            ->willReturn([]);
+
+        // Call getDatabases and check that the result is an empty array
+        $result = $this->managerWithCyberLink->getDatabases($domain);
+
+        $this->assertIsArray($result);
+        $this->assertEmpty($result);
+    }
+
+    /**
+     * Test getDatabases handles exceptions.
+     */
+    public function testGetDatabasesHandlesException()
+    {
+        $this->setUpWithCyberLink();
+
+        $domain = 'example.com';
+
+        // Mock the listDatabases() method to throw an exception
+        $this->cyberLinkMock->method('listDatabases')
+            ->with($domain, true)
+            ->willThrowException(new \Exception('Connection failed'));
+
+        // Call getDatabases and check that an exception is thrown and handled
+        $this->expectException(\Exception::class);
+        $this->managerWithCyberLink->getDatabases($domain);
+    }
+
+    /**
+     * Test getDatabases with namesOnly parameter set to false.
+     */
+    public function testGetDatabasesWithFullInfo()
+    {
+        $this->setUpWithCyberLink();
+
+        $domain        = 'example.com';
+        $mockDatabases = [
+            ['id' => 1, 'dbName' => 'example_com_db1', 'dbUser' => 'user1', 'otherInfo' => 'info1'],
+            ['id' => 2, 'dbName' => 'example_com_db2', 'dbUser' => 'user2', 'otherInfo' => 'info2'],
+        ];
+
+        // Mock the listDatabases() method to return full database info
+        $this->cyberLinkMock->method('listDatabases')
+            ->with($domain, false)
+            ->willReturn($mockDatabases);
+
+        // Call getDatabases with namesOnly set to false
+        $result = $this->managerWithCyberLink->getDatabases($domain, false);
+
+        $this->assertIsArray($result);
+        $this->assertCount(2, $result);
+        $this->assertArrayHasKey('id', $result[0]);
+        $this->assertArrayHasKey('otherInfo', $result[0]);
+        $this->assertEquals(1, $result[0]['id']);
+        $this->assertEquals('info1', $result[0]['otherInfo']);
+    }
+
     public function testCreateWebsiteCyberApiSuccess()
     {
         $this->setUpWithCyberApi();

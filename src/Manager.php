@@ -363,6 +363,22 @@ class Manager
     }
 
     /**
+     * Get the databases on the droplet for a given domain.
+     *
+     * This method connects to the droplet using CyberLink and retrieves the list of databases on the droplet
+     * for a given domain.
+     *
+     * @param string $domain    The domain name to retrieve databases for.
+     * @param bool   $namesOnly If true, the method will return an array of database names only.
+     *
+     * @return array An array of database information.
+     */
+    public function getDatabases(string $domain, bool $namesOnly = true): array
+    {
+        return $this->connectCyberLink()->listDatabases($domain, $namesOnly);
+    }
+
+    /**
      * Configure the DNS for a domain.
      *
      * This method authenticates the DigitalOcean client and attempts to configure
@@ -971,14 +987,13 @@ EOF',
         $this->configureDns($domainName, $this->config[$this->dropletName]['server_ip']);
         $this->logger->info("DNS configured successfully for {$domainName}");
 
-        // Step 4: Establish CyberLink connection and create user
-        $cyberLink = $this->connectCyberLink();
-        $users     = $cyberLink->listUsers(true);
+        // Step 4: Create User
+        $users = $this->getUsers(true);
         if (in_array($username, $users)) {
             $this->logger->info("User {$username} already exists");
         } else {
             $this->logger->info("Creating user {$username}");
-            if ($cyberLink->createUser($firstName, $lastName, $email, $username, $password, $websitesLimit)) {
+            if ($this->connectCyberLink()->createUser($firstName, $lastName, $email, $username, $password, $websitesLimit)) {
                 $this->logger->info("User {$username} created successfully");
             } else {
                 $this->logger->error("Failed to create user {$username}");
@@ -991,7 +1006,7 @@ EOF',
             $this->logger->info("Website {$domainName} already exists");
         } else {
             $this->logger->info("Creating website for domain {$domainName}");
-            if ($cyberLink->createWebsite($domainName, $websiteEmail, $websiteOwner)) {
+            if ($this->connectCyberLink()->createWebsite($domainName, $websiteEmail, $websiteOwner)) {
                 $this->logger->info("Website for {$domainName} created successfully");
             } else {
                 $this->logger->error("Failed to create website for {$domainName}");
@@ -1007,11 +1022,20 @@ EOF',
         }
 
         // Step 7: Create Database
-        $this->logger->info("Creating database for {$domainName}");
-        if ($this->createDatabase($domainName, $username, $password)) {
-            $this->logger->info("Database for {$domainName} created successfully");
+        $databases = $this->getDatabases($domainName);
+        $dbCount   = count($databases);
+        if ($dbCount > 0) {
+            $this->logger->info(
+                "Database(s) for {$domainName} already exist. Count: {$dbCount}.",
+                ['databases' => $databases]
+            );
         } else {
-            $this->logger->error("Failed to create database for {$domainName}");
+            $this->logger->info("Creating database for {$domainName}");
+            if ($this->createDatabase($domainName, $username, $password)) {
+                $this->logger->info("Database for {$domainName} created successfully");
+            } else {
+                $this->logger->error("Failed to create database for {$domainName}");
+            }
         }
 
         // Step 8: Enable Database External Access

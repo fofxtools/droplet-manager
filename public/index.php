@@ -8,15 +8,20 @@ use FOfX\DropletManager\Manager;
 $manager   = new Manager('test', 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php');
 $cyberLink = $manager->connectCyberLink();
 
+//$domain = 'iffduruguay.org';
+$domain = 'examplesite.com';
+//$domain = 'breastsurgeryhawaii.com';
+$ip = '137.184.202.167';
+//$manager->configureDns($domain, $ip);
+
 //print_r($manager->getWebsites());
 //print_r($manager->getUsers());
+print_r($manager->getDatabases($domain));
 $manager->verifyConnectionSsh();
 
-//$domain = 'iffduruguay.org';
-//$domain = 'example.com';
-$domain = 'breastsurgeryhawaii.com';
-$ip     = '137.184.202.167';
-//$manager->configureDns($domain, $ip);
+//print_r($cyberLink->listUsers());
+//print_r($cyberLink->listWebsites());
+//print_r($cyberLink->listDatabases($domain));
 
 //$linuxUser = $manager->getLinuxUserForDomain($domain);
 //echo $linuxUser . PHP_EOL;

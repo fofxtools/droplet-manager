@@ -665,9 +665,22 @@ EOL;
      *
      * @return mixed
      */
-    public function listDatabases($databaseWebsite)
+    public function listDatabases($databaseWebsite, $namesOnly = false)
     {
-        return json_decode($this->ssh->exec($this->commandBuilder(__FUNCTION__ . 'Json', ['databaseWebsite' => $databaseWebsite])));
+        $output = $this->ssh->exec($this->commandBuilder(__FUNCTION__ . 'Json', ['databaseWebsite' => $databaseWebsite]));
+        // Must decode twice to get the correct format
+        $json = json_decode(json_decode($output));
+
+        if ($namesOnly) {
+            $names = [];
+            foreach ($json as $database) {
+                $names[$database->id] = $database->dbName;
+            }
+
+            return $names;
+        }
+
+        return $output;
     }
     #endregion
 
