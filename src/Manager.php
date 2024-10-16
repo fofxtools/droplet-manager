@@ -899,21 +899,26 @@ EOF',
             ],
         ]);
 
-        $data = array_map(function ($ns) {
-            return ['data' => $ns];
-        }, $nameservers);
+        //$data = array_map(function ($ns) {
+        //    return ['data' => $ns];
+        //}, $nameservers);
+        $data = [
+            'nameServers' => $nameservers,
+        ];
 
         try {
-            $response = $client->put("/v1/domains/{$domain}/records/NS/@", [
+            //$response = $client->put("/v1/domains/{$domain}/records/NS/@", [
+            $response = $client->patch("/v1/domains/{$domain}", [
                 'json' => $data,
             ]);
 
-            if ($response->getStatusCode() === 200) {
-                $this->logger->info("Nameservers updated successfully for domain {$domain}");
+            $statusCode = $response->getStatusCode();
+            if ($statusCode === 200 || $statusCode === 204) {
+                $this->logger->info("Nameservers updated successfully for domain {$domain}. Status code: {$statusCode}");
 
                 return true;
             } else {
-                $this->logger->error("Failed to update nameservers for domain {$domain}: " . $response->getBody());
+                $this->logger->error("Failed to update nameservers for domain {$domain}. Status code: {$statusCode}. Response body: " . $response->getBody());
 
                 return false;
             }

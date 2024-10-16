@@ -37,4 +37,4 @@ $ip     = '137.184.202.167';
 
 //var_dump($manager->updateNameserversNamecheap($domain));
 
-//var_dump($manager->updateNameserversGodaddy($domain));
+//var_dump($manager->updateNameserversGodaddy($domain, ['ns1.digitalocean.com', 'ns2.digitalocean.com', 'ns3.digitalocean.com']));
