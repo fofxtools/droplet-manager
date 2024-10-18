@@ -5,19 +5,22 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use FOfX\DropletManager;
 use FOfX\DropletManager\Manager;
 
-$manager   = new Manager('test', 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php');
+$manager   = new Manager('test2', 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php');
 $cyberLink = $manager->connectCyberLink();
 
 //$domain = 'iffduruguay.org';
-$domain = 'examplesite.com';
+//$domain = 'examplesite.com';
 //$domain = 'breastsurgeryhawaii.com';
-$ip = '137.184.202.167';
+$domain = '022679.xyz';
+//$domain = 'australianboatsales.com';
+//$ip     = '137.184.202.167';
+$ip = '157.230.89.120';
 //$manager->configureDns($domain, $ip);
 
 //print_r($manager->getWebsites());
 //print_r($manager->getUsers());
-print_r($manager->getDatabases($domain));
-$manager->verifyConnectionSsh();
+//print_r($manager->getDatabases($domain));
+//$manager->verifyConnectionSsh();
 
 //print_r($cyberLink->listUsers());
 //print_r($cyberLink->listWebsites());

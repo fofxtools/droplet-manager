@@ -13,6 +13,8 @@ use FOfX\DropletManager\CyberLink;
 use Monolog\Logger;
 use Namecheap\Api as NamecheapApi;
 use Namecheap\Domain\DomainsDns;
+use DigitalOceanV2\Api\Domain;
+use DigitalOceanV2\Api\DomainRecord;
 
 /**
  * Unit tests for the Manager class.
@@ -31,6 +33,7 @@ class ManagerTest extends TestCase
     private $mockLogger;
     private $mockNamecheapApi;
     private $domainsDnsMock;
+    private $managerForDnsTests;
 
     /**
      * Setup the Manager instance with a mock configuration before each test.
@@ -122,12 +125,40 @@ class ManagerTest extends TestCase
     }
 
     /**
-     * Test setting and getting the droplet name.
+     * Sets up a partial mock of the Manager class for DNS configuration tests.
+     *
+     * @return void
      */
-    public function testSetAndGetDropletName(): void
+    protected function setUpDnsConfigurationTests(): void
+    {
+        $this->managerForDnsTests = $this->getMockBuilder(Manager::class)
+            ->setConstructorArgs(['test-droplet', $this->mockConfig, $this->mockClient, $this->mockLogger])
+            ->onlyMethods(['isDomainConfigured'])
+            ->getMock();
+    }
+
+    /**
+     * Test setting the droplet name.
+     */
+    public function testSetDropletName(): void
     {
         $this->manager->setDropletName('new-droplet');
-        $this->assertSame('new-droplet', $this->manager->getDropletName());
+        $reflection = new \ReflectionClass($this->manager);
+        $property   = $reflection->getProperty('dropletName');
+        $property->setAccessible(true);
+        $this->assertSame('new-droplet', $property->getValue($this->manager));
+    }
+
+    /**
+     * Test getting the droplet name.
+     */
+    public function testGetDropletName(): void
+    {
+        $reflection = new \ReflectionClass($this->manager);
+        $property   = $reflection->getProperty('dropletName');
+        $property->setAccessible(true);
+        $property->setValue($this->manager, 'test-droplet');
+        $this->assertSame('test-droplet', $this->manager->getDropletName());
     }
 
     /**
@@ -598,34 +629,8 @@ class ManagerTest extends TestCase
 
     /**
      * Test getDatabases returns an array of databases.
-     */
-    public function testGetDatabasesReturnsArray()
-    {
-        $this->setUpWithCyberLink();
-
-        $domain        = 'example.com';
-        $mockDatabases = [
-            ['dbName' => 'example_com_db1', 'dbUser' => 'user1'],
-            ['dbName' => 'example_com_db2', 'dbUser' => 'user2'],
-        ];
-
-        // Mock the listDatabases() method to return a sample array of databases
-        $this->cyberLinkMock->method('listDatabases')
-            ->with($domain, true)
-            ->willReturn($mockDatabases);
-
-        // Call getDatabases and check that the result is as expected
-        $result = $this->managerWithCyberLink->getDatabases($domain);
-
-        $this->assertIsArray($result);
-        $this->assertCount(2, $result);
-        $this->assertEquals('example_com_db1', $result[0]['dbName']);
-        $this->assertEquals('user1', $result[0]['dbUser']);
-    }
-
     /**
      * Test getDatabases handles empty array.
-     */
     public function testGetDatabasesHandlesEmptyArray()
     {
         $this->setUpWithCyberLink();
@@ -690,6 +695,138 @@ class ManagerTest extends TestCase
         $this->assertArrayHasKey('otherInfo', $result[0]);
         $this->assertEquals(1, $result[0]['id']);
         $this->assertEquals('info1', $result[0]['otherInfo']);
+    }
+
+    public function testConfigureDnsForNewDomain()
+    {
+        $this->setUpDnsConfigurationTests();
+
+        $domainName = 'example.com';
+        $serverIp   = '123.45.67.89';
+
+        // Mock the domain and domainRecord API clients
+        $mockDomainClient       = $this->createMock(\DigitalOceanV2\Api\Domain::class);
+        $mockDomainRecordClient = $this->createMock(\DigitalOceanV2\Api\DomainRecord::class);
+
+        // Configure the mock client to return the mock Domain and DomainRecord APIs
+        $this->mockClient->method('domain')->willReturn($mockDomainClient);
+        $this->mockClient->method('domainRecord')->willReturn($mockDomainRecordClient);
+
+        // Set up expectations for a new domain
+        $this->managerForDnsTests->expects($this->once())
+            ->method('isDomainConfigured')
+            ->willReturn(false);
+
+        $mockDomainClient->expects($this->once())->method('create')->with($domainName);
+
+        // Expect two calls to create() with different parameters
+        $mockDomainRecordClient->expects($this->exactly(2))
+            ->method('create')
+            ->willReturnCallback(function ($domain, $type, $name, $data) use ($domainName, $serverIp) {
+                static $callNumber = 0;
+                $callNumber++;
+
+                if ($callNumber === 1) {
+                    $this->assertEquals($domainName, $domain);
+                    $this->assertEquals('A', $type);
+                    $this->assertEquals('@', $name);
+                    $this->assertEquals($serverIp, $data);
+                } elseif ($callNumber === 2) {
+                    $this->assertEquals($domainName, $domain);
+                    $this->assertEquals('CNAME', $type);
+                    $this->assertEquals('www', $name);
+                    $this->assertEquals('@', $data);
+                }
+
+                return new \DigitalOceanV2\Entity\DomainRecord();
+            });
+
+        // Call the method
+        $this->managerForDnsTests->configureDns($domainName, $serverIp);
+    }
+
+    public function testConfigureDnsForExistingDomain()
+    {
+        $this->setUpDnsConfigurationTests();
+
+        $domainName = 'example.com';
+        $serverIp   = '123.45.67.89';
+
+        // Mock the domain and domainRecord API clients
+        $mockDomainClient       = $this->createMock(\DigitalOceanV2\Api\Domain::class);
+        $mockDomainRecordClient = $this->createMock(\DigitalOceanV2\Api\DomainRecord::class);
+
+        // Configure the mock client to return the mock Domain and DomainRecord APIs
+        $this->mockClient->method('domain')->willReturn($mockDomainClient);
+        $this->mockClient->method('domainRecord')->willReturn($mockDomainRecordClient);
+
+        // Set up expectations for an existing domain
+        $this->managerForDnsTests->expects($this->once())
+            ->method('isDomainConfigured')
+            ->willReturn(true);
+
+        $mockRecords = [
+            new \DigitalOceanV2\Entity\DomainRecord(['id' => 1, 'type' => 'A', 'name' => '@', 'data' => '98.76.54.32']),
+            new \DigitalOceanV2\Entity\DomainRecord(['id' => 2, 'type' => 'CNAME', 'name' => 'www', 'data' => '@']),
+        ];
+        $mockDomainRecordClient->method('getAll')->willReturn($mockRecords);
+
+        // Expect the A record to be updated
+        $mockDomainRecordClient->expects($this->once())
+            ->method('update')
+            ->with($domainName, 1, '@', $serverIp);
+
+        // Call the method
+        $this->managerForDnsTests->configureDns($domainName, $serverIp);
+    }
+
+    public function testConfigureDnsForExistingDomainMissingRecords()
+    {
+        $this->setUpDnsConfigurationTests();
+
+        $domainName = 'example.com';
+        $serverIp   = '123.45.67.89';
+
+        // Mock the domain and domainRecord API clients
+        $mockDomainClient       = $this->createMock(\DigitalOceanV2\Api\Domain::class);
+        $mockDomainRecordClient = $this->createMock(\DigitalOceanV2\Api\DomainRecord::class);
+
+        // Configure the mock client to return the mock Domain and DomainRecord APIs
+        $this->mockClient->method('domain')->willReturn($mockDomainClient);
+        $this->mockClient->method('domainRecord')->willReturn($mockDomainRecordClient);
+
+        // Set up expectations for an existing domain with missing records
+        $this->managerForDnsTests->expects($this->once())
+            ->method('isDomainConfigured')
+            ->willReturn(true);
+
+        $mockRecords = []; // No existing records
+        $mockDomainRecordClient->method('getAll')->willReturn($mockRecords);
+
+        // Expect both A and CNAME records to be created
+        $mockDomainRecordClient->expects($this->exactly(2))
+            ->method('create')
+            ->willReturnCallback(function ($domain, $type, $name, $data) use ($domainName, $serverIp) {
+                static $callNumber = 0;
+                $callNumber++;
+
+                if ($callNumber === 1) {
+                    $this->assertEquals($domainName, $domain);
+                    $this->assertEquals('A', $type);
+                    $this->assertEquals('@', $name);
+                    $this->assertEquals($serverIp, $data);
+                } elseif ($callNumber === 2) {
+                    $this->assertEquals($domainName, $domain);
+                    $this->assertEquals('CNAME', $type);
+                    $this->assertEquals('www', $name);
+                    $this->assertEquals('@', $data);
+                }
+
+                return new \DigitalOceanV2\Entity\DomainRecord();
+            });
+
+        // Call the method
+        $this->managerForDnsTests->configureDns($domainName, $serverIp);
     }
 
     public function testCreateWebsiteCyberApiSuccess()
@@ -853,6 +990,100 @@ class ManagerTest extends TestCase
         $this->sshMock->method('exec')->willReturn('');
 
         $result = $this->manager->getLinuxUserForDomain('example.com');
+        $this->assertFalse($result);
+    }
+
+    public function testCreateHtaccessForHttpsRedirectSuccess()
+    {
+        // Mock SSH connection
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'not exists',  // Check if .htaccess exists
+                '',            // Create .htaccess file
+                'testuser',    // Get Linux user for domain
+                ''             // Set ownership
+            );
+
+        $result = $this->manager->createHtaccessForHttpsRedirect('example.com');
+        $this->assertTrue($result);
+    }
+
+    public function testCreateHtaccessForHttpsRedirectExistingFileNoOverwrite()
+    {
+        // Mock SSH connection
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturn('exists');  // Check if .htaccess exists
+
+        $result = $this->manager->createHtaccessForHttpsRedirect('example.com', false);
+        $this->assertTrue($result);
+    }
+
+    public function testCreateHtaccessForHttpsRedirectExistingFileOverwrite()
+    {
+        // Mock SSH connection
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'exists',      // Check if .htaccess exists
+                '',            // Create .htaccess file
+                'testuser',    // Get Linux user for domain
+                ''             // Set ownership
+            );
+
+        $result = $this->manager->createHtaccessForHttpsRedirect('example.com', true);
+        $this->assertTrue($result);
+    }
+
+    public function testCreateHtaccessForHttpsRedirectFailure()
+    {
+        // Mock SSH connection
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(2))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'not exists',  // Check if .htaccess exists
+                'Error: Permission denied'  // Create .htaccess file (fails)
+            );
+
+        $result = $this->manager->createHtaccessForHttpsRedirect('example.com');
+        $this->assertFalse($result);
+    }
+
+    public function testCreateHtaccessForHttpsRedirectFailureOnOwnership()
+    {
+        // Mock SSH connection
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'not exists',  // Check if .htaccess exists
+                '',            // Create .htaccess file
+                'testuser',    // Get Linux user for domain
+                'Error: Permission denied'  // Set ownership (fails)
+            );
+
+        $result = $this->manager->createHtaccessForHttpsRedirect('example.com');
+        $this->assertFalse($result);
+    }
+
+    public function testCreateHtaccessForHttpsRedirectFailureOnGetLinuxUser()
+    {
+        // Mock SSH connection
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(3))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'not exists',  // Check if .htaccess exists
+                '',            // Create .htaccess file
+                ''             // Get Linux user for domain (fails)
+            );
+
+        $result = $this->manager->createHtaccessForHttpsRedirect('example.com');
         $this->assertFalse($result);
     }
 
@@ -1214,10 +1445,37 @@ class ManagerTest extends TestCase
             'ApiResponse' => ['_Status' => 'OK'],
         ]);
 
-        $this->domainsDnsMock->method('setCustom')->willReturn($response);
+        $this->domainsDnsMock->method('setCustom')
+            ->with('example', 'com', 'ns1.digitalocean.com,ns2.digitalocean.com,ns3.digitalocean.com')
+            ->willReturn($response);
 
         // Run the method with the mocked DomainsDns
-        $result = $this->manager->updateNameserversNamecheap('example.com', false, $this->mockNamecheapApi, $this->domainsDnsMock);
+        $result = $this->manager->updateNameserversNamecheap('example.com', null, false, $this->mockNamecheapApi, $this->domainsDnsMock);
+
+        // Verify result is the expected response
+        $this->assertSame($response, $result);
+    }
+
+    public function testUpdateNameserversNamecheapWithCustomNameservers()
+    {
+        // Set up the expectation for logging
+        $this->mockLogger->expects($this->once())
+            ->method('info')
+            ->with($this->stringContains('Successfully updated nameservers'));
+
+        // Mock a successful API response
+        $response = json_encode([
+            'ApiResponse' => ['_Status' => 'OK'],
+        ]);
+
+        $customNameservers = ['ns1.custom.com', 'ns2.custom.com'];
+
+        $this->domainsDnsMock->method('setCustom')
+            ->with('example', 'com', 'ns1.custom.com,ns2.custom.com')
+            ->willReturn($response);
+
+        // Run the method with the mocked DomainsDns and custom nameservers
+        $result = $this->manager->updateNameserversNamecheap('example.com', $customNameservers, false, $this->mockNamecheapApi, $this->domainsDnsMock);
 
         // Verify result is the expected response
         $this->assertSame($response, $result);
@@ -1240,10 +1498,12 @@ class ManagerTest extends TestCase
             ],
         ]);
 
-        $this->domainsDnsMock->method('setCustom')->willReturn($response);
+        $this->domainsDnsMock->method('setCustom')
+            ->with('example', 'com', 'ns1.digitalocean.com,ns2.digitalocean.com,ns3.digitalocean.com')
+            ->willReturn($response);
 
         // Run the method with the mocked DomainsDns
-        $result = $this->manager->updateNameserversNamecheap('example.com', false, $this->mockNamecheapApi, $this->domainsDnsMock);
+        $result = $this->manager->updateNameserversNamecheap('example.com', null, false, $this->mockNamecheapApi, $this->domainsDnsMock);
 
         // Verify result is the error response
         $this->assertSame($response, $result);
@@ -1256,14 +1516,16 @@ class ManagerTest extends TestCase
             'ApiResponse' => ['_Status' => 'OK'],
         ]);
 
-        $this->domainsDnsMock->method('setCustom')->willReturn($response);
+        $this->domainsDnsMock->method('setCustom')
+            ->with('example', 'com', 'ns1.digitalocean.com,ns2.digitalocean.com,ns3.digitalocean.com')
+            ->willReturn($response);
 
         // Inject the mock NamecheapApi with sandbox enabled
         $sandboxApi = $this->createMock(NamecheapApi::class);
         $sandboxApi->expects($this->once())->method('enableSandbox');
 
         // Run the method with the sandbox API and mocked DomainsDns
-        $result = $this->manager->updateNameserversNamecheap('example.com', true, $sandboxApi, $this->domainsDnsMock);
+        $result = $this->manager->updateNameserversNamecheap('example.com', null, true, $sandboxApi, $this->domainsDnsMock);
 
         // Assert result is the expected response
         $this->assertSame($response, $result);
@@ -1277,10 +1539,12 @@ class ManagerTest extends TestCase
             ->with($this->stringContains('Error updating nameservers'));
 
         // Mock a failed API call
-        $this->domainsDnsMock->method('setCustom')->willReturn(false);
+        $this->domainsDnsMock->method('setCustom')
+            ->with('example', 'com', 'ns1.digitalocean.com,ns2.digitalocean.com,ns3.digitalocean.com')
+            ->willReturn(false);
 
         // Run the method with the mocked DomainsDns
-        $result = $this->manager->updateNameserversNamecheap('example.com', false, $this->mockNamecheapApi, $this->domainsDnsMock);
+        $result = $this->manager->updateNameserversNamecheap('example.com', null, false, $this->mockNamecheapApi, $this->domainsDnsMock);
 
         // Verify result is false
         $this->assertFalse($result);

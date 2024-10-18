@@ -574,14 +574,32 @@ class Manager
      * This method uses an SSH connection to the droplet and creates or modifies
      * the .htaccess file in the domain's public_html directory to redirect HTTP traffic to HTTPS.
      *
-     * @param string $domainName The domain name for which HTTPS redirection should be configured.
+     * @param string $domainName        The domain name for which HTTPS redirection should be configured.
+     * @param bool   $overwriteHtaccess If true, the .htaccess file will be overwritten if it already exists.
      *
      * @return bool True if the file was created and configured successfully, false on failure.
      */
-    public function createHtaccessForHttpsRedirect(string $domainName): bool
+    public function createHtaccessForHttpsRedirect(string $domainName, bool $overwriteHtaccess = false): bool
     {
         // Ensure SSH connection is established
         $this->verifyConnectionSsh();
+
+        $escapedDomain = escapeshellarg($domainName);
+        $htaccessPath  = "/home/{$domainName}/public_html/.htaccess";
+
+        // Check if .htaccess already exists
+        $checkCommand = "test -f {$htaccessPath} && echo 'exists' || echo 'not exists'";
+        $checkResult  = trim($this->sshConnection->exec($checkCommand));
+
+        if ($checkResult === 'exists') {
+            if (!$overwriteHtaccess) {
+                $this->logger->info(".htaccess file already exists for domain {$domainName}. Skipping creation.");
+
+                return true;
+            } else {
+                $this->logger->info(".htaccess file already exists for domain {$domainName}. Overwriting as requested.");
+            }
+        }
 
         // Define the .htaccess content for HTTPS redirection
         $htaccessContent = <<<EOF
@@ -591,15 +609,20 @@ RewriteRule ^/?(.*) https://%{SERVER_NAME}/\$1 [R,L]
 EOF;
 
         // Securely add the .htaccess content to the file on the server
-        $escapedDomain = escapeshellarg($domainName);
-        $command       = sprintf(
-            'cat <<EOF > /home/%s/public_html/.htaccess
+        $command = sprintf(
+            'cat <<EOF > %s
 %s
 EOF',
-            $escapedDomain,
+            $htaccessPath,
             $htaccessContent
         );
-        $this->sshConnection->exec($command);
+        $output = $this->sshConnection->exec($command);
+
+        if ($output !== '') {
+            $this->logger->error("Failed to create/update .htaccess for {$domainName}. Output: {$output}");
+
+            return false;
+        }
 
         // Retrieve the Linux user for the domain
         $username = $this->getLinuxUserForDomain($domainName);
@@ -612,8 +635,14 @@ EOF',
         }
 
         // Set the correct ownership for the .htaccess file to the domain owner
-        $ownershipCommand = sprintf('chown %s:%s /home/%s/public_html/.htaccess', escapeshellarg($username), escapeshellarg($username), $escapedDomain);
-        $this->sshConnection->exec($ownershipCommand);
+        $ownershipCommand = sprintf('chown %s:%s %s', escapeshellarg($username), escapeshellarg($username), $htaccessPath);
+        $ownershipOutput  = $this->sshConnection->exec($ownershipCommand);
+
+        if ($ownershipOutput !== '') {
+            $this->logger->error("Failed to set ownership for .htaccess file for {$domainName}. Output: {$ownershipOutput}");
+
+            return false;
+        }
 
         $this->logger->info("HTTPS redirection configured for domain {$domainName} via .htaccess");
 
@@ -846,6 +875,7 @@ EOF',
      * And edit the Whitelisted IPs.
      *
      * @param string            $domain       The domain name to update.
+     * @param array|null        $nameservers  Optional array of nameservers. Defaults to DigitalOcean's nameservers.
      * @param bool              $sandbox      Whether to use Namecheap's sandbox environment.
      * @param NamecheapApi|null $namecheapApi Optional injected NamecheapApi instance. For testing.
      * @param DomainsDns|null   $domainsDns   Optional injected DomainsDns instance. For testing.
@@ -854,6 +884,7 @@ EOF',
      */
     public function updateNameserversNamecheap(
         string $domain,
+        ?array $nameservers = null,
         bool $sandbox = false,
         ?NamecheapApi $namecheapApi = null,
         ?DomainsDns $domainsDns = null
@@ -879,7 +910,11 @@ EOF',
         // Use the injected DomainsDns instance, or create a new one if none is provided
         $domainsDns = $domainsDns ?? new DomainsDns($this->namecheapApi);
 
-        $response = $domainsDns->setCustom($sld, $tld, 'ns1.digitalocean.com,ns2.digitalocean.com,ns3.digitalocean.com');
+        // Use provided nameservers or default to DigitalOcean's
+        $nameservers       = $nameservers ?? ['ns1.digitalocean.com', 'ns2.digitalocean.com', 'ns3.digitalocean.com'];
+        $nameserversString = implode(',', $nameservers);
+
+        $response = $domainsDns->setCustom($sld, $tld, $nameserversString);
 
         // Check for errors in the API response
         if (is_string($response) || is_array($response)) {

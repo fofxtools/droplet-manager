@@ -5,6 +5,10 @@ namespace FOfX\DropletManager;
 use Exception;
 use phpseclib3\Net\SSH2;
 use phpseclib3\Crypt\PublicKeyLoader;
+use League\Flysystem\Filesystem;
+use League\Flysystem\PhpseclibV3\SftpAdapter;
+use League\Flysystem\PhpseclibV3\SftpConnectionProvider;
+use League\Flysystem\UnixVisibility\PortableVisibilityConverter;
 
 /**
  * Class CyberLink
@@ -43,10 +47,6 @@ class CyberLink
         $this->ssh = new SSH2($ip, $port, $timeout);
         if (!is_null($key)) {
             $rsa = PublicKeyLoader::load(file_get_contents($key), $password);
-            //old auth method
-            //$rsa = new RSA();
-            //$rsa->setPassword($password);
-            //$rsa->load($key);
         }
         if (!$this->ssh->login($user, (isset($rsa) ? $rsa : $password))) {
             throw new Exception('SSH Login Failed');
@@ -58,18 +58,29 @@ class CyberLink
 
         #region Secure FTP File System
         if ($enableSecureFTP) {
-            $sftpConfig = [
-                'host'     => $ip,
-                'port'     => $port,
-                'username' => $user,
-                'password' => $password,
-                'root'     => '/',
-                'timeout'  => $timeout,
-            ];
-            if (!is_null($key)) {
-                $sftpConfig['privateKey'] = $key;
-            }
-            #$this->fs = new Filesystem(new SftpAdapter($sftpConfig));
+            $connectionProvider = new SftpConnectionProvider(
+                $ip,
+                $user,
+                $password,
+                $key,
+                null,
+                $port,
+                false,
+                $timeout
+            );
+
+            $adapter = new SftpAdapter($connectionProvider, '/', PortableVisibilityConverter::fromArray([
+                'file' => [
+                    'public'  => 0644,
+                    'private' => 0600,
+                ],
+                'dir' => [
+                    'public'  => 0755,
+                    'private' => 0700,
+                ],
+            ]));
+
+            $this->fs = new Filesystem($adapter);
         }
         #endregion
 
@@ -96,9 +107,16 @@ class CyberLink
     }
 
     /**
-     * @param $str
+     * Modified parse function to optionally handle multiple JSON objects in the output
+     * and optionally return the parsed data.
      *
-     * @return bool
+     * @param      $str
+     * @param bool $endOfString     If true, the pattern will match the end of the string.
+     *                              This is because createWebsite might return multiple JSON objects.
+     *                              The last one contains the success message.
+     * @param bool $returnParseData If true, the function will return the parsed data instead of a boolean.
+     *
+     * @return bool|array
      */
     public function parse($str, bool $endOfString = false, $returnParseData = false)
     {
@@ -258,15 +276,15 @@ EOL;
     public function setCustomSSL($domain, $publicKey, $privateKey)
     {
         if (is_null($this->fs)) {
-            throw new Exception('This methods require SFTP feature.');
+            throw new Exception('This method requires SFTP feature.');
         }
         $sslPath        = '/etc/letsencrypt/live/' . $domain;
         $privateKeyFile = $sslPath . '/privkeyCustom.pem';
         $publicKeyFile  = $sslPath . '/fullchainCustom.pem';
-        if (!$this->fs->has($sslPath)) {
-            $this->fs->createDir($sslPath);
+        if (!$this->fs->directoryExists($sslPath)) {
+            $this->fs->createDirectory($sslPath);
         }
-        if ($this->fs->put($publicKeyFile, trim($publicKey)) and $this->fs->put($privateKeyFile, trim($privateKey))) {
+        if ($this->fs->write($publicKeyFile, trim($publicKey)) && $this->fs->write($privateKeyFile, trim($privateKey))) {
             $this->ssh->exec('chown -R lsadm:lsadm ' . escapeshellarg($sslPath));
             $this->ssh->exec('chmod 644 ' . escapeshellarg($publicKeyFile));
             $this->ssh->exec('chmod 644 ' . escapeshellarg($privateKeyFile));
@@ -306,7 +324,7 @@ vhssl  {
 
 EOL;
             $contents = trim(preg_replace("/\n\n+/", "\n\n", $contents . $sslConf));
-            if ($this->fs->put($vhost, $contents)) {
+            if ($this->fs->write($vhost, $contents)) {
                 #region httpd_config.conf
                 $httpd_config = '/usr/local/lsws/conf/httpd_config.conf';
                 $contents     = '';
@@ -319,19 +337,19 @@ EOL;
                         return true;
                     } else {
                         $contents = preg_replace("/(listener(\s+|)SSL(\s+|){)/si", "$1{$mapPrepend}", $contents);
-                        if ($this->fs->put($httpd_config, $contents)) {
+                        if ($this->fs->write($httpd_config, $contents)) {
                             $this->restartLiteSpeed();
 
                             return true;
                         }
                     }
                 } else {
-                    throw new Exception("SSL Listener doesn't exists.", 404);
+                    throw new Exception("SSL Listener doesn't exist.", 404);
                 }
                 #endregion
             }
         } catch (Exception $e) {
-            throw new Exception("Virtual Host Doesn't Exists.", 404);
+            throw new Exception("Virtual Host Doesn't Exist.", 404);
         }
 
         return false;
@@ -355,8 +373,14 @@ EOL;
      *
      * @return bool
      */
-    public function createWebsite($domainName, $email, $owner = self::owner, $package = self::package, $phpVersion = self::phpVersion)
-    {
+    public function createWebsite(
+        $domainName,
+        $email,
+        $owner = self::owner,
+        $package = self::package,
+        $phpVersion = self::phpVersion,
+        $debug = false
+    ) {
         if (empty($domainName)) {
             throw new Exception('Domain name cannot be empty!');
         }
@@ -364,7 +388,7 @@ EOL;
             throw new Exception('Email cannot be empty!');
         }
 
-        $output = $this->ssh->exec($this->commandBuilder(__FUNCTION__, [
+        $command = $this->commandBuilder(__FUNCTION__, [
             'package'     => $package,
             'owner'       => $owner,
             'domainName'  => $domainName,
@@ -373,7 +397,12 @@ EOL;
             'ssl'         => 1,
             'dkim'        => 1,
             'openBasedir' => 1,
-        ]));
+        ]);
+        $output = $this->ssh->exec($command);
+
+        if ($debug) {
+            var_dump($output);
+        }
 
         // Use end_of_string = true because there may be multiple JSON objects in the output
         return $this->parse($output, true);
@@ -667,11 +696,12 @@ EOL;
      */
     public function listDatabases($databaseWebsite, $namesOnly = false)
     {
-        $output = $this->ssh->exec($this->commandBuilder(__FUNCTION__ . 'Json', ['databaseWebsite' => $databaseWebsite]));
+        $command = $this->commandBuilder(__FUNCTION__ . 'Json', ['databaseWebsite' => $databaseWebsite]);
+        $output  = $this->ssh->exec($command);
         // Must decode twice to get the correct format
         $json = json_decode(json_decode($output));
 
-        if ($namesOnly) {
+        if ($namesOnly && is_array($json)) {
             $names = [];
             foreach ($json as $database) {
                 $names[$database->id] = $database->dbName;
@@ -680,7 +710,12 @@ EOL;
             return $names;
         }
 
-        return $output;
+        // If the JSON output is not an array, return an empty array
+        if (!is_array($json)) {
+            return [];
+        }
+
+        return $json;
     }
     #endregion
 
