@@ -476,11 +476,16 @@ EOL;
      */
     public function listWebsites(bool $namesOnly = false)
     {
-        $websites = json_decode($this->ssh->exec($this->commandBuilder(__FUNCTION__ . 'Json')));
+        $command = $this->commandBuilder(__FUNCTION__ . 'Json');
+        $decoded = json_decode($this->ssh->exec($command));
+        // Must decode twice to get the correct format
+        // Decode associative true to get array elements rather than objects
+        $websites = json_decode($decoded, true);
+
         if ($namesOnly) {
             $names = [];
             foreach ($websites as $website) {
-                $names[] = $website->domain;
+                $names[] = $website['domain'];
             }
 
             return $names;
@@ -863,7 +868,7 @@ EOL;
     #endregion
     #endregion
 
-    public function createUser($firstName, $lastName, $email, $username, $password, $websitesLimit = 0)
+    public function createUser($firstName, $lastName, $email, $username, $password, $websitesLimit = 0, $debug = false)
     {
         if (empty($firstName)) {
             throw new Exception('First name cannot be empty!');
@@ -881,7 +886,7 @@ EOL;
             throw new Exception('Password cannot be empty!');
         }
 
-        $output = $this->ssh->exec($this->commandBuilder(__FUNCTION__, [
+        $command = $this->commandBuilder(__FUNCTION__, [
             'firstName'     => $firstName,
             'lastName'      => $lastName,
             'email'         => $email,
@@ -890,7 +895,12 @@ EOL;
             'websitesLimit' => $websitesLimit,
             'selectedACL'   => 'user',
             'securityLevel' => 'HIGH',
-        ]));
+        ]);
+        $output = $this->ssh->exec($command);
+
+        if ($debug) {
+            var_dump($output);
+        }
 
         return $this->parse($output);
     }

@@ -11,8 +11,8 @@ $cyberLink = $manager->connectCyberLink();
 //$domain = 'iffduruguay.org';
 //$domain = 'examplesite.com';
 //$domain = 'breastsurgeryhawaii.com';
-$domain = '022679.xyz';
-//$domain = 'australianboatsales.com';
+//$domain = '022679.xyz';
+$domain = 'australianboatsales.com';
 //$ip     = '137.184.202.167';
 $ip = '157.230.89.120';
 //$manager->configureDns($domain, $ip);
@@ -49,3 +49,5 @@ $ip = '157.230.89.120';
 //var_dump($manager->updateNameserversGodaddy($domain, ['ns1.digitalocean.com', 'ns2.digitalocean.com', 'ns3.digitalocean.com']));
 
 //print_r($cyberLink->listUsers());
+
+//$manager->setupWebsite($domain);

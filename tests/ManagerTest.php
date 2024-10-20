@@ -15,6 +15,9 @@ use Namecheap\Api as NamecheapApi;
 use Namecheap\Domain\DomainsDns;
 use DigitalOceanV2\Api\Domain;
 use DigitalOceanV2\Api\DomainRecord;
+use GuzzleHttp\Client;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\StreamInterface;
 
 /**
  * Unit tests for the Manager class.
@@ -461,7 +464,7 @@ class ManagerTest extends TestCase
     public function testIsDomainConfiguredReturnsTrueWhenDomainExists()
     {
         // Mock the domain method and configure it to return a mock response
-        $mockDomain = $this->createMock(\DigitalOceanV2\Api\Domain::class);
+        $mockDomain = $this->createMock(Domain::class);
 
         // Mock the getByName method to return a mock response
         $mockDomain->method('getByName')
@@ -484,7 +487,7 @@ class ManagerTest extends TestCase
     public function testIsDomainConfiguredReturnsFalseWhenDomainDoesNotExist()
     {
         // Mock the domain method and configure it to throw a ResourceNotFoundException
-        $mockDomain = $this->createMock(\DigitalOceanV2\Api\Domain::class);
+        $mockDomain = $this->createMock(Domain::class);
 
         // Mock the getByName method to throw a ResourceNotFoundException
         $mockDomain->method('getByName')
@@ -508,19 +511,47 @@ class ManagerTest extends TestCase
     {
         $this->setUpWithCyberLink();
 
-        // Mock the listWebsites() method to return a sample array of websites
-        $this->cyberLinkMock->method('listWebsites')->willReturn([
-            ['domain' => 'example.com', 'status' => 'active'],
-            ['domain' => 'test.com', 'status' => 'inactive'],
-        ]);
+        // Mock the listWebsites() method for full information
+        $this->cyberLinkMock->method('listWebsites')
+            ->willReturnCallback(function ($namesOnly) {
+                if (!$namesOnly) {
+                    return [
+                        ['domain' => 'example.com', 'adminEmail' => 'admin@example.com', 'ipAddress' => '123.45.67.89', 'admin' => 'admin', 'package' => 'Default', 'state' => 'Active'],
+                        ['domain' => 'test.com', 'adminEmail' => 'admin@test.com', 'ipAddress' => '98.76.54.32', 'admin' => 'admin', 'package' => 'Default', 'state' => 'Active'],
+                    ];
+                } else {
+                    return ['example.com', 'test.com'];
+                }
+            });
 
-        // Call getWebsites and check that the result is as expected
-        $result = $this->managerWithCyberLink->getWebsites();
+        // Test full information mode
+        $result = $this->managerWithCyberLink->getWebsites(false);
 
         $this->assertIsArray($result);
         $this->assertCount(2, $result);
         $this->assertEquals('example.com', $result[0]['domain']);
-        $this->assertEquals('active', $result[0]['status']);
+        $this->assertEquals('Active', $result[0]['state']);
+        $this->assertArrayHasKey('adminEmail', $result[0]);
+    }
+
+    public function testGetWebsitesReturnsNamesOnly()
+    {
+        $this->setUpWithCyberLink();
+
+        // Mock the listWebsites() method for names-only
+        $this->cyberLinkMock->method('listWebsites')
+            ->with(true)
+            ->willReturn(['example.com', 'test.com']);
+
+        // Call getWebsites with namesOnly set to true
+        $result = $this->managerWithCyberLink->getWebsites(true);
+
+        $this->assertIsArray($result);
+        $this->assertCount(2, $result);
+        $this->assertEquals('example.com', $result[0]);
+        $this->assertEquals('test.com', $result[1]);
+        $this->assertIsString($result[0]);
+        $this->assertIsString($result[1]);
     }
 
     /**
@@ -705,8 +736,8 @@ class ManagerTest extends TestCase
         $serverIp   = '123.45.67.89';
 
         // Mock the domain and domainRecord API clients
-        $mockDomainClient       = $this->createMock(\DigitalOceanV2\Api\Domain::class);
-        $mockDomainRecordClient = $this->createMock(\DigitalOceanV2\Api\DomainRecord::class);
+        $mockDomainClient       = $this->createMock(Domain::class);
+        $mockDomainRecordClient = $this->createMock(DomainRecord::class);
 
         // Configure the mock client to return the mock Domain and DomainRecord APIs
         $this->mockClient->method('domain')->willReturn($mockDomainClient);
@@ -753,8 +784,8 @@ class ManagerTest extends TestCase
         $serverIp   = '123.45.67.89';
 
         // Mock the domain and domainRecord API clients
-        $mockDomainClient       = $this->createMock(\DigitalOceanV2\Api\Domain::class);
-        $mockDomainRecordClient = $this->createMock(\DigitalOceanV2\Api\DomainRecord::class);
+        $mockDomainClient       = $this->createMock(Domain::class);
+        $mockDomainRecordClient = $this->createMock(DomainRecord::class);
 
         // Configure the mock client to return the mock Domain and DomainRecord APIs
         $this->mockClient->method('domain')->willReturn($mockDomainClient);
@@ -788,8 +819,8 @@ class ManagerTest extends TestCase
         $serverIp   = '123.45.67.89';
 
         // Mock the domain and domainRecord API clients
-        $mockDomainClient       = $this->createMock(\DigitalOceanV2\Api\Domain::class);
-        $mockDomainRecordClient = $this->createMock(\DigitalOceanV2\Api\DomainRecord::class);
+        $mockDomainClient       = $this->createMock(Domain::class);
+        $mockDomainRecordClient = $this->createMock(DomainRecord::class);
 
         // Configure the mock client to return the mock Domain and DomainRecord APIs
         $this->mockClient->method('domain')->willReturn($mockDomainClient);
@@ -1556,8 +1587,8 @@ class ManagerTest extends TestCase
         $nameservers = ['ns1.example.com', 'ns2.example.com', 'ns3.example.com'];
 
         // Mock the Guzzle client
-        $mockClient   = $this->createMock(\GuzzleHttp\Client::class);
-        $mockResponse = $this->createMock(\Psr\Http\Message\ResponseInterface::class);
+        $mockClient   = $this->createMock(Client::class);
+        $mockResponse = $this->createMock(ResponseInterface::class);
 
         // Simulate a successful response
         $mockResponse->method('getStatusCode')->willReturn(200);
@@ -1583,9 +1614,9 @@ class ManagerTest extends TestCase
         $domain      = 'example.com';
         $nameservers = ['ns1.example.com', 'ns2.example.com', 'ns3.example.com'];
 
-        $mockClient   = $this->createMock(\GuzzleHttp\Client::class);
-        $mockResponse = $this->createMock(\Psr\Http\Message\ResponseInterface::class);
-        $mockStream   = $this->createMock(\Psr\Http\Message\StreamInterface::class);
+        $mockClient   = $this->createMock(Client::class);
+        $mockResponse = $this->createMock(ResponseInterface::class);
+        $mockStream   = $this->createMock(StreamInterface::class);
 
         $mockStream->method('__toString')->willReturn('Not Found');
         $mockResponse->method('getStatusCode')->willReturn(404);
@@ -1608,7 +1639,7 @@ class ManagerTest extends TestCase
         $domain      = 'example.com';
         $nameservers = ['ns1.example.com', 'ns2.example.com', 'ns3.example.com'];
 
-        $mockClient = $this->createMock(\GuzzleHttp\Client::class);
+        $mockClient = $this->createMock(Client::class);
         $mockClient->expects($this->once())
             ->method('patch')
             ->willThrowException(new \GuzzleHttp\Exception\RequestException('Request failed', new \GuzzleHttp\Psr7\Request('PATCH', 'test')));

@@ -182,3 +182,59 @@ function sanitize_domain_for_database(string $domainName, string $username = '',
     // Remove any trailing underscores from the final result
     return rtrim($sanitizedDomain, '_');
 }
+
+/**
+ * Generate a password using a random selection of characters.
+ *
+ * @param int  $length            The length of the password (minimum 4 characters).
+ * @param bool $include_numbers   Whether to include numbers in the password.
+ * @param bool $include_uppercase Whether to include uppercase letters.
+ * @param bool $include_special   Whether to include special characters.
+ *
+ * @throws \InvalidArgumentException If the password length is less than 4 characters.
+ *
+ * @return string The generated password.
+ */
+function generate_password(int $length = 8, bool $include_numbers = true, bool $include_uppercase = true, bool $include_special = false): string
+{
+    if ($length < 4) {
+        throw new \InvalidArgumentException('Password length must be at least 4 characters.');
+    }
+
+    // Define character sets
+    $char_sets = [
+        'lowercase' => 'abcdefghijklmnopqrstuvwxyz',
+        'numbers'   => '0123456789',
+        'uppercase' => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+        'special'   => '!@#$%^&*',
+    ];
+
+    // Define which character sets to include
+    $include_sets = [
+        'lowercase' => true,
+        'numbers'   => $include_numbers,
+        'uppercase' => $include_uppercase,
+        'special'   => $include_special,
+    ];
+
+    $available_characters = '';
+    $password             = '';
+
+    // Build the available characters string and the password string
+    foreach ($include_sets as $set => $include) {
+        if ($include) {
+            $available_characters .= $char_sets[$set];
+            $set_length = strlen($char_sets[$set]);
+            $password .= $char_sets[$set][random_int(0, $set_length - 1)];
+        }
+    }
+
+    $available_length = strlen($available_characters);
+    // Add characters until the password is the desired length
+    while (strlen($password) < $length) {
+        $password .= $available_characters[random_int(0, $available_length - 1)];
+    }
+
+    // Shuffle the password to ensure randomness
+    return str_shuffle($password);
+}

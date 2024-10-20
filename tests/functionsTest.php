@@ -3,6 +3,7 @@
 namespace FOfX\DropletManager\Tests;
 
 use PHPUnit\Framework\TestCase;
+use FOfX\DropletManager;
 
 use function FOfX\DropletManager\sanitize_domain_for_database;
 
@@ -112,5 +113,65 @@ class FunctionsTest extends TestCase
             'example',
             sanitize_domain_for_database('example.com', '', false, false, 'db_')
         );
+    }
+
+    public function testGeneratePasswordDefault()
+    {
+        $password = DropletManager\generate_password();
+        $this->assertEquals(8, strlen($password));
+        $this->assertMatchesRegularExpression('/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8}$/', $password);
+    }
+
+    public function testGeneratePasswordCustomLength()
+    {
+        $password = DropletManager\generate_password(12);
+        $this->assertEquals(12, strlen($password));
+    }
+
+    public function testGeneratePasswordWithoutNumbers()
+    {
+        $password = DropletManager\generate_password(8, false);
+        $this->assertMatchesRegularExpression('/^(?=.*[a-z])(?=.*[A-Z])[a-zA-Z]{8}$/', $password);
+    }
+
+    public function testGeneratePasswordWithoutUppercase()
+    {
+        $password = DropletManager\generate_password(8, true, false);
+        $this->assertMatchesRegularExpression('/^(?=.*[a-z])(?=.*\d)[a-z\d]{8}$/', $password);
+    }
+
+    public function testGeneratePasswordWithSpecialCharacters()
+    {
+        $password = DropletManager\generate_password(8, true, true, true);
+        $this->assertMatchesRegularExpression('/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[a-zA-Z\d!@#$%^&*]{8}$/', $password);
+    }
+
+    public function testGeneratePasswordMinimumLength()
+    {
+        $password = DropletManager\generate_password(4);
+        $this->assertEquals(4, strlen($password));
+    }
+
+    public function testGeneratePasswordInvalidLengthThrowsException()
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        DropletManager\generate_password(3);
+    }
+
+    public function testGeneratePasswordLong()
+    {
+        $length   = 100;
+        $password = DropletManager\generate_password($length, true, true, true);
+        $this->assertEquals($length, strlen($password));
+        $this->assertMatchesRegularExpression('/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[a-zA-Z\d!@#$%^&*]{100}$/', $password);
+    }
+
+    public function testGeneratePasswordAllCharacterSetsIncluded()
+    {
+        $password = DropletManager\generate_password(8, true, true, true);
+        $this->assertMatchesRegularExpression('/[a-z]/', $password);
+        $this->assertMatchesRegularExpression('/[A-Z]/', $password);
+        $this->assertMatchesRegularExpression('/\d/', $password);
+        $this->assertMatchesRegularExpression('/[!@#$%^&*]/', $password);
     }
 }

@@ -996,20 +996,26 @@ EOF',
         }
     }
 
-    public function setupWebsite(array $data): void
-    {
-        // Step 1: Retrieve user and site info
-        $firstName     = $data['firstName'];
-        $lastName      = $data['lastName'];
-        $email         = $data['email'];
-        $username      = $data['username'];
-        $password      = $data['password'];
-        $websitesLimit = $data['websitesLimit'];
-        $domainName    = $data['domainName'];
-        $websiteOwner  = $data['username'];
-        $websiteEmail  = $data['websiteEmail'];
+    public function setupWebsite(
+        string $domainName,
+        string $websiteEmail = 'john.doe@gmail.com',
+        string $firstName = 'John',
+        string $lastName = 'Doe',
+        string $userEmail = 'john.doe@gmail.com',
+        string $username = CyberLink::owner,
+        ?string $password = null,
+        int $websitesLimit = 0,
+        string $package = CyberLink::package,
+        string $phpVersion = CyberLink::phpVersion,
+        bool $debug = false
+    ): void {
+        $websiteOwner = $username;
 
-        // Step 2: Verify SSH connection
+        if ($password === null) {
+            $password = generate_password();
+        }
+
+        // Verify SSH connection
         try {
             $this->verifyConnectionSsh();
         } catch (\Throwable $th) {
@@ -1017,38 +1023,40 @@ EOF',
             exit;
         }
 
-        // Step 3: Configure DNS
+        // Configure DNS
         $this->logger->info("Configuring DNS for {$domainName}");
         $this->configureDns($domainName, $this->config[$this->dropletName]['server_ip']);
         $this->logger->info("DNS configured successfully for {$domainName}");
 
-        // Step 4: Create User
+        // Create User
         $users = $this->getUsers(true);
-        if (in_array($username, $users)) {
+        if ($username === 'admin') {
+            $this->logger->info("Username is 'admin'. Not creating user.");
+        } elseif (in_array($username, $users)) {
             $this->logger->info("User {$username} already exists");
         } else {
             $this->logger->info("Creating user {$username}");
-            if ($this->connectCyberLink()->createUser($firstName, $lastName, $email, $username, $password, $websitesLimit)) {
+            if ($this->connectCyberLink()->createUser($firstName, $lastName, $userEmail, $username, $password, $websitesLimit, $debug)) {
                 $this->logger->info("User {$username} created successfully");
             } else {
                 $this->logger->error("Failed to create user {$username}");
             }
         }
 
-        // Step 5: Create Website
+        // Create Website
         $websites = $this->getWebsites(true);
         if (in_array($domainName, $websites)) {
             $this->logger->info("Website {$domainName} already exists");
         } else {
             $this->logger->info("Creating website for domain {$domainName}");
-            if ($this->connectCyberLink()->createWebsite($domainName, $websiteEmail, $websiteOwner)) {
+            if ($this->connectCyberLink()->createWebsite($domainName, $websiteEmail, $websiteOwner, $package, $phpVersion, $debug)) {
                 $this->logger->info("Website for {$domainName} created successfully");
             } else {
                 $this->logger->error("Failed to create website for {$domainName}");
             }
         }
 
-        // Step 6: Redirect HTTP to HTTPS
+        // Redirect HTTP to HTTPS
         $this->logger->info("Redirecting {$domainName} to HTTPS");
         if ($this->createHtaccessForHttpsRedirect($domainName)) {
             $this->logger->info("HTTPS redirection configured for {$domainName}");
@@ -1056,7 +1064,7 @@ EOF',
             $this->logger->error("Failed to configure HTTPS redirection for {$domainName}");
         }
 
-        // Step 7: Create Database
+        // Create Database
         $databases = $this->getDatabases($domainName);
         $dbCount   = count($databases);
         if ($dbCount > 0) {
@@ -1073,7 +1081,7 @@ EOF',
             }
         }
 
-        // Step 8: Enable Database External Access
+        // Enable Database External Access
         $this->logger->info("Enabling external access to the database for {$username}");
         if ($this->grantRemoteDatabaseAccess($domainName, $username, $password)) {
             $this->logger->info("External database access granted for {$username}");
@@ -1081,7 +1089,7 @@ EOF',
             $this->logger->error("Failed to grant external access to the database for {$username}");
         }
 
-        // Step 9: Set SFTP/SSH Access
+        // Set SFTP/SSH Access
         $this->logger->info("Setting user {$username} SSH password for domain {$domainName}");
         if ($this->setUserPasswordSsh($domainName, $password)) {
             $this->logger->info("User {$username} SSH password set for {$domainName}");
@@ -1089,7 +1097,7 @@ EOF',
             $this->logger->error("Failed to set {username} SSH password for {$domainName}");
         }
 
-        // Step 10: Unrestrain Symbolic Links
+        // Unrestrain Symbolic Links
         $this->logger->info("Unrestraining symbolic links for {$domainName}");
         if ($this->enableSymlinksForDomain($domainName)) {
             $this->logger->info("Symbolic links unrestrained for {$domainName}");
