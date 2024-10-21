@@ -5,7 +5,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use FOfX\DropletManager\Manager;
 
 // Create a new Manager instance
-$manager = new Manager('test2');
+$manager = new Manager('test');
 
 // Data for setting up a website
 $domainName    = 'examplesite.com';

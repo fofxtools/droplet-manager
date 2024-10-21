@@ -1669,4 +1669,91 @@ class ManagerTest extends TestCase
         $result = $manager->updateNameserversGodaddy($domain, $nameservers);
         $this->assertFalse($result);
     }
+
+    public function testUpdateMyCnfPasswordSuccess()
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'password123', // Extract password from /root/.db_password
+                'oldpassword', // Extract current password from /root/.my.cnf
+                '',            // Backup .my.cnf file
+                ''             // Update .my.cnf file
+            );
+
+        $result = $this->manager->updateMyCnfPassword();
+        $this->assertTrue($result);
+    }
+
+    public function testUpdateMyCnfPasswordNoChangeNeeded()
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(2))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'password123', // Extract password from /root/.db_password
+                'password123'  // Extract current password from /root/.my.cnf (same as .db_password)
+            );
+
+        $result = $this->manager->updateMyCnfPassword();
+        $this->assertTrue($result);
+    }
+
+    public function testUpdateMyCnfPasswordFailToExtractDbPassword()
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturn(''); // Fail to extract password from /root/.db_password
+
+        $result = $this->manager->updateMyCnfPassword();
+        $this->assertFalse($result);
+    }
+
+    public function testUpdateMyCnfPasswordFailToExtractMyCnfPassword()
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(2))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'password123', // Extract password from /root/.db_password
+                ''             // Fail to extract current password from /root/.my.cnf
+            );
+
+        $result = $this->manager->updateMyCnfPassword();
+        $this->assertFalse($result);
+    }
+
+    public function testUpdateMyCnfPasswordFailToUpdate()
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'password123',   // Extract password from /root/.db_password
+                'oldpassword',   // Extract current password from /root/.my.cnf
+                '',              // Backup .my.cnf file
+                'Update failed'  // Fail to update .my.cnf file
+            );
+
+        $result = $this->manager->updateMyCnfPassword();
+        $this->assertFalse($result);
+    }
+
+    public function testUpdateMyCnfPasswordSshConnectionFailure()
+    {
+        // Configure the SSH mock to fail login
+        $this->sshMock->method('login')->willReturn(false);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Login failed.');
+
+        $this->manager->updateMyCnfPassword();
+    }
 }

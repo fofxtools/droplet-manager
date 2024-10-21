@@ -1105,4 +1105,63 @@ EOF',
             $this->logger->error("Failed to unrestrain symbolic links for {$domainName}");
         }
     }
+
+    /**
+     * Updates the MySQL root password in /root/.my.cnf from /root/.db_password,
+     * only if the passwords are different.
+     *
+     * This method retrieves the MySQL root password from /root/.db_password
+     * and compares it with the current password in /root/.my.cnf. If they are
+     * different, it updates /root/.my.cnf using an SSH connection.
+     *
+     * @throws \Exception If SSH login fails or if the update process encounters an error.
+     *
+     * @return bool Returns true if the password is successfully updated, false otherwise.
+     */
+    public function updateMyCnfPassword(): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        // Extract the MySQL root password from /root/.db_password
+        $dbPassword = trim($this->sshConnection->exec("grep -w 'root_mysql_pass' /root/.db_password | cut -d'=' -f2 | tr -d '\"' | sed -n '1p'"));
+        if (empty($dbPassword)) {
+            $this->logger->error('Failed to extract the MySQL root password from /root/.db_password');
+
+            return false;
+        }
+
+        // Extract the current password from /root/.my.cnf
+        $myCnfPassword = trim($this->sshConnection->exec("grep 'password=' /root/.my.cnf | cut -d'=' -f2 | tr -d '\"' | sed -n '1p'"));
+        if (empty($myCnfPassword)) {
+            $this->logger->error('Failed to extract the current password from /root/.my.cnf');
+
+            return false;
+        }
+
+        // Compare the passwords
+        if ($dbPassword === $myCnfPassword) {
+            $this->logger->info('The MySQL root password in /root/.my.cnf already matches the one in /root/.db_password.');
+
+            return true;
+        }
+
+        // Backup the original /root/.my.cnf file
+        $this->sshConnection->exec('cp /root/.my.cnf /root/.my.cnf.orig');
+
+        // Update the password in /root/.my.cnf using sed
+        $escapedPassword = escapeshellcmd($dbPassword);
+        $updateCommand   = "sed -i 's/password=\".*\"/password=\"$escapedPassword\"/' /root/.my.cnf";
+        $output          = $this->sshConnection->exec($updateCommand);
+
+        if ($output !== '') {
+            $this->logger->error('Failed to update /root/.my.cnf. Output: ' . $output);
+
+            return false;
+        }
+
+        $this->logger->info('The /root/.my.cnf password has been successfully updated.');
+
+        return true;
+    }
 }

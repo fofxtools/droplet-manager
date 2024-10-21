@@ -5,16 +5,17 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use FOfX\DropletManager;
 use FOfX\DropletManager\Manager;
 
-$manager   = new Manager('test2', 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php');
+$manager   = new Manager('test');
 $cyberLink = $manager->connectCyberLink();
 
 //$domain = 'iffduruguay.org';
 //$domain = 'examplesite.com';
 //$domain = 'breastsurgeryhawaii.com';
-//$domain = '022679.xyz';
-$domain = 'australianboatsales.com';
-//$ip     = '137.184.202.167';
-$ip = '157.230.89.120';
+$domain = '022679.xyz';
+//$domain = 'australianboatsales.com';
+
+//$ip     = '159.203.109.54';
+//$ip = '157.230.89.120';
 //$manager->configureDns($domain, $ip);
 
 //print_r($manager->getWebsites());
@@ -51,3 +52,5 @@ $ip = '157.230.89.120';
 //print_r($cyberLink->listUsers());
 
 //$manager->setupWebsite($domain);
+
+$manager->updateMyCnfPassword();
