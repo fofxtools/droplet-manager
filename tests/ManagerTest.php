@@ -1756,4 +1756,111 @@ class ManagerTest extends TestCase
 
         $this->manager->updateMyCnfPassword();
     }
+
+    public function testUpdateNanoCtrlFSearchBindingAlreadySet()
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->with("grep '^bind \^F whereis all' /etc/nanorc")
+            ->willReturn('bind ^F whereis all');
+
+        $result = $this->manager->updateNanoCtrlFSearchBinding();
+        $this->assertTrue($result);
+    }
+
+    public function testUpdateNanoCtrlFSearchBindingUncomment()
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(3))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // No existing binding
+                '#bind ^F whereis all',  // Commented out binding
+                ''   // Successful uncomment
+            );
+
+        $result = $this->manager->updateNanoCtrlFSearchBinding();
+        $this->assertTrue($result);
+    }
+
+    public function testUpdateNanoCtrlFSearchBindingUncommentWithSpace()
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(3))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // No existing binding
+                '# bind ^F whereis all',  // Commented out binding with space
+                ''   // Successful uncomment
+            );
+
+        $result = $this->manager->updateNanoCtrlFSearchBinding();
+        $this->assertTrue($result);
+    }
+
+    public function testUpdateNanoCtrlFSearchBindingUpdateExisting()
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // No existing binding
+                '',  // No commented out binding
+                'bind ^W whereis all',  // Different key bound
+                ''   // Successful update
+            );
+
+        $result = $this->manager->updateNanoCtrlFSearchBinding();
+        $this->assertTrue($result);
+    }
+
+    public function testUpdateNanoCtrlFSearchBindingAddNew()
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // No existing binding
+                '',  // No commented out binding
+                '',  // No other key bound
+                ''   // Successful append
+            );
+
+        $result = $this->manager->updateNanoCtrlFSearchBinding();
+        $this->assertTrue($result);
+    }
+
+    public function testUpdateNanoCtrlFSearchBindingFailure()
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // No existing binding
+                '',  // No commented out binding
+                '',  // No other key bound
+                'Permission denied'  // Failed to append
+            );
+
+        $result = $this->manager->updateNanoCtrlFSearchBinding();
+        $this->assertFalse($result);
+    }
+
+    public function testUpdateNanoCtrlFSearchBindingSshConnectionFailure()
+    {
+        // Configure the SSH mock to fail login
+        $this->sshMock->method('login')->willReturn(false);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Login failed.');
+
+        $this->manager->updateNanoCtrlFSearchBinding();
+    }
 }

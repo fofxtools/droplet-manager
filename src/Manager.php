@@ -1164,4 +1164,81 @@ EOF',
 
         return true;
     }
+
+    /**
+     * Updates the Nano key binding for the "Where Is" function to Ctrl+F in /etc/nanorc.
+     *
+     * This method checks if the binding already exists, and if not, it updates or adds it as needed.
+     * 1. If the binding is already set to Ctrl+F, it leaves it as is.
+     * 2. If the binding is commented out, it un-comments it.
+     * 3. If a different key is bound to "whereis all", it updates it to Ctrl+F.
+     * 4. If no binding exists, it appends a new line for the binding.
+     *
+     * @throws \Exception If SSH connection fails or if the update process encounters an error.
+     *
+     * @return bool Returns true if the binding is successfully updated or already set, false otherwise.
+     */
+    public function updateNanoCtrlFSearchBinding(): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        // Check if the binding already exists with Ctrl+F
+        $existingBinding = $this->sshConnection->exec("grep '^bind \\^F whereis all' /etc/nanorc");
+        if (trim($existingBinding) !== '') {
+            $this->logger->info('The Nano "Where Is" binding is already set to Ctrl+F.');
+
+            return true;
+        }
+
+        // Check if the binding is commented out
+        $commentedBinding = $this->sshConnection->exec("grep '^#.*bind \\^F whereis all' /etc/nanorc");
+        if (trim($commentedBinding) !== '') {
+            // Uncomment the existing binding
+            $uncommentCommand = "sed -i 's/^#\\s*\\(bind \\^F whereis all\\)/\\1/' /etc/nanorc";
+            $output           = $this->sshConnection->exec($uncommentCommand);
+
+            if ($output === '') {
+                $this->logger->info('The Nano "Where Is" binding was commented out and has been uncommented.');
+
+                return true;
+            } else {
+                $this->logger->error('Failed to uncomment the "Where Is" binding. Output: ' . $output);
+
+                return false;
+            }
+        }
+
+        // Check if another key is bound to "whereis all"
+        $otherBinding = $this->sshConnection->exec("grep '^bind \\^[^F] whereis all' /etc/nanorc");
+        if (trim($otherBinding) !== '') {
+            // Update the binding to Ctrl+F
+            $updateCommand = "sed -i 's/^bind \\^[^F] whereis all/bind \\^F whereis all/' /etc/nanorc";
+            $output        = $this->sshConnection->exec($updateCommand);
+
+            if ($output === '') {
+                $this->logger->info('The Nano "Where Is" binding was updated to use Ctrl+F.');
+
+                return true;
+            } else {
+                $this->logger->error('Failed to update the "Where Is" binding to Ctrl+F. Output: ' . $output);
+
+                return false;
+            }
+        }
+
+        // If no binding exists, append the new binding
+        $appendCommand = "echo 'bind ^F whereis all' >> /etc/nanorc";
+        $output        = $this->sshConnection->exec($appendCommand);
+
+        if ($output === '') {
+            $this->logger->info('The Nano "Where Is" binding was added with Ctrl+F.');
+
+            return true;
+        } else {
+            $this->logger->error('Failed to add the "Where Is" binding with Ctrl+F. Output: ' . $output);
+
+            return false;
+        }
+    }
 }

@@ -53,4 +53,5 @@ $domain = '022679.xyz';
 
 //$manager->setupWebsite($domain);
 
-$manager->updateMyCnfPassword();
+//$manager->updateMyCnfPassword();
+//$manager->updateNanoCtrlFSearchBinding();
