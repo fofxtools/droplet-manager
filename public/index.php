@@ -51,7 +51,7 @@ $domain = '022679.xyz';
 
 //print_r($cyberLink->listUsers());
 
-//$manager->setupWebsite($domain);
+//$manager->setupWebsite($domain, true);
+//$manager->deleteWebsite($domain, true);
 
 //$manager->updateMyCnfPassword();
-//$manager->updateNanoCtrlFSearchBinding();

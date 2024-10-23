@@ -19,7 +19,8 @@ $websitesLimit = 0;
 
 // Call the setupWebsite method
 try {
-    $manager->setupWebsite($domainName, $websiteEmail, $firstName, $lastName, $userEmail, $username, $password, $websitesLimit);
+    $debug = true;
+    $manager->setupWebsite($domainName, $debug, $websiteEmail, $firstName, $lastName, $userEmail, $username, $password, $websitesLimit);
     echo "Website setup completed successfully!\n";
 } catch (\Exception $e) {
     echo 'An error occurred during website setup: ' . $e->getMessage() . "\n";

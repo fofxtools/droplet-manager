@@ -602,15 +602,19 @@ class Manager
         }
 
         // Define the .htaccess content for HTTPS redirection
+        // Check for the presence of the REDIRECT_STATUS environment variable to avoid infinite redirects
         $htaccessContent = <<<EOF
 RewriteEngine On
 RewriteCond %{HTTPS}  !=on
-RewriteRule ^/?(.*) https://%{SERVER_NAME}/\$1 [R,L]
+RewriteCond %{ENV:REDIRECT_STATUS} !=200
+RewriteRule ^/?(.*) https://%{HTTP_HOST}/\$1 [R=301,L]
 EOF;
 
         // Securely add the .htaccess content to the file on the server
+        // The 'EOF' is wrapped in single quotes to prevent the shell from interpreting variables.
+        // This ensures that the content, including '$1', is treated as a literal string and not substituted.
         $command = sprintf(
-            'cat <<EOF > %s
+            'cat <<\'EOF\' > %s
 %s
 EOF',
             $htaccessPath,
@@ -998,6 +1002,7 @@ EOF',
 
     public function setupWebsite(
         string $domainName,
+        bool $debug = false,
         string $websiteEmail = 'john.doe@gmail.com',
         string $firstName = 'John',
         string $lastName = 'Doe',
@@ -1006,8 +1011,7 @@ EOF',
         ?string $password = null,
         int $websitesLimit = 0,
         string $package = CyberLink::package,
-        string $phpVersion = CyberLink::phpVersion,
-        bool $debug = false
+        string $phpVersion = CyberLink::phpVersion
     ): void {
         $websiteOwner = $username;
 
@@ -1064,6 +1068,16 @@ EOF',
             $this->logger->error("Failed to configure HTTPS redirection for {$domainName}");
         }
 
+        // Manually issue SSL certificate
+        // Even though createWebsite() has 'ssl' => 1, the HTTPS redirect in .htaccess
+        // will not work, and the site will give 404 errors, unless we manually issue the SSL certificate.
+        $this->logger->info("Issuing SSL certificate for {$domainName}");
+        if ($this->connectCyberLink()->issueSSL($domainName, $debug)) {
+            $this->logger->info("SSL certificate issued for {$domainName}");
+        } else {
+            $this->logger->error("Failed to issue SSL certificate for {$domainName}");
+        }
+
         // Create Database
         $databases = $this->getDatabases($domainName);
         $dbCount   = count($databases);
@@ -1104,6 +1118,27 @@ EOF',
         } else {
             $this->logger->error("Failed to unrestrain symbolic links for {$domainName}");
         }
+    }
+
+    /**
+     * Deletes a website from CyberPanel.
+     *
+     * @param string $domainName The domain name of the website to delete.
+     * @param bool   $debug      Whether to output debug information.
+     *
+     * @return bool Returns true if the website was deleted successfully, false otherwise.
+     */
+    public function deleteWebsite(string $domainName, bool $debug = false): bool
+    {
+        $this->logger->info("Deleting website for {$domainName}");
+        $result = $this->connectCyberLink()->deleteWebsite($domainName, $debug);
+        if ($result) {
+            $this->logger->info("Website for {$domainName} deleted successfully");
+        } else {
+            $this->logger->error("Failed to delete website for {$domainName}");
+        }
+
+        return $result;
     }
 
     /**

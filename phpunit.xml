@@ -2,13 +2,14 @@
 <phpunit
          bootstrap="vendor/autoload.php"
          displayDetailsOnTestsThatTriggerDeprecations="true"
+         displayDetailsOnPhpunitDeprecations="true"
          displayDetailsOnTestsThatTriggerErrors="true"
          displayDetailsOnTestsThatTriggerNotices="true"
          displayDetailsOnTestsThatTriggerWarnings="true"
          colors="true"
          >
     <testsuites>
-        <testsuite name="default">
+        <testsuite name="Unit">
             <directory>tests</directory>
         </testsuite>
     </testsuites>

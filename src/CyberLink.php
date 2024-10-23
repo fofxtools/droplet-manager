@@ -112,11 +112,11 @@ class CyberLink
      *
      * @param      $str
      * @param bool $endOfString     If true, the pattern will match the end of the string.
-     *                              This is because createWebsite might return multiple JSON objects.
+     *                              This is because createWebsite and issueSSL might return multiple JSON objects.
      *                              The last one contains the success message.
      * @param bool $returnParseData If true, the function will return the parsed data instead of a boolean.
      *
-     * @return bool|array
+     * @return mixed
      */
     public function parse($str, bool $endOfString = false, $returnParseData = false)
     {
@@ -409,21 +409,29 @@ EOL;
     }
 
     /**
-     * @param $domainName
+     * @param string $domainName
+     * @param bool   $debug
      *
      * @throws Exception
      *
      * @return bool
      */
-    public function deleteWebsite($domainName)
+    public function deleteWebsite(string $domainName, bool $debug = false)
     {
         if (empty($domainName)) {
             throw new Exception('Domain name cannot be empty!');
         }
 
-        return $this->parse($this->ssh->exec($this->commandBuilder(__FUNCTION__, [
+        $command = $this->commandBuilder(__FUNCTION__, [
             'domainName' => $domainName,
-        ])));
+        ]);
+        $output = $this->ssh->exec($command);
+
+        if ($debug) {
+            var_dump($output);
+        }
+
+        return $this->parse($output);
     }
 
     /**
@@ -816,21 +824,30 @@ EOL;
 
     #region SSL Functions
     /**
-     * @param $domainName
+     * @param string $domainName
+     * @param bool   $debug
      *
      * @throws Exception
      *
      * @return bool
      */
-    public function issueSSL($domainName)
+    public function issueSSL($domainName, bool $debug = false)
     {
         if (empty($domainName)) {
             throw new Exception('Domain name cannot be empty!');
         }
 
-        return $this->parse($this->ssh->exec($this->commandBuilder(__FUNCTION__, [
+        $command = $this->commandBuilder(__FUNCTION__, [
             'domainName' => $domainName,
-        ])));
+        ]);
+        $output = $this->ssh->exec($command);
+
+        if ($debug) {
+            var_dump($output);
+        }
+
+        // Use end_of_string = true because there may be multiple JSON objects in the output
+        return $this->parse($output, true);
     }
 
     /**
@@ -939,5 +956,35 @@ EOL;
         }
 
         return [];
+    }
+
+    /**
+     * Enable CyberPanel API access for a given username
+     *
+     * @param string $userName
+     * @param bool   $debug
+     *
+     * @throws Exception
+     *
+     * @return bool
+     */
+    public function enableApiAccess(string $userName, bool $debug = false)
+    {
+        if (empty($userName)) {
+            throw new Exception('Username cannot be empty!');
+        }
+
+        $command = $this->commandBuilder('editUser', [
+            'userName'  => $userName,
+            'apiAccess' => 'ENABLE',
+        ]);
+
+        $output = $this->ssh->exec($command);
+
+        if ($debug) {
+            var_dump($output);
+        }
+
+        return $this->parse($output);
     }
 }
