@@ -147,11 +147,14 @@ $               # end of string
 /x
 ';
         }
+
         preg_match($pattern, $str, $json);
         $parseData = json_decode($json[0]);
+
         if ($returnParseData) {
             return $parseData;
         }
+
         $this->lastMessage = trim(str_replace($json[0], '', $str));
 
         return $this->getBoolResult($parseData);
@@ -956,35 +959,5 @@ EOL;
         }
 
         return [];
-    }
-
-    /**
-     * Enable CyberPanel API access for a given username
-     *
-     * @param string $userName
-     * @param bool   $debug
-     *
-     * @throws Exception
-     *
-     * @return bool
-     */
-    public function enableApiAccess(string $userName, bool $debug = false)
-    {
-        if (empty($userName)) {
-            throw new Exception('Username cannot be empty!');
-        }
-
-        $command = $this->commandBuilder('editUser', [
-            'userName'  => $userName,
-            'apiAccess' => 'ENABLE',
-        ]);
-
-        $output = $this->ssh->exec($command);
-
-        if ($debug) {
-            var_dump($output);
-        }
-
-        return $this->parse($output);
     }
 }

@@ -55,3 +55,6 @@ $domain = '022679.xyz';
 //$manager->deleteWebsite($domain, true);
 
 //$manager->updateMyCnfPassword();
+//var_dump($manager->enableCyberPanelApiAccess());
+
+echo DropletManager\escapeshellarg_linux("user'name");

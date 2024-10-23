@@ -3,6 +3,7 @@
 namespace FOfX\DropletManager\Tests;
 
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use FOfX\DropletManager;
 
 use function FOfX\DropletManager\sanitize_domain_for_database;
@@ -173,5 +174,32 @@ class FunctionsTest extends TestCase
         $this->assertMatchesRegularExpression('/[A-Z]/', $password);
         $this->assertMatchesRegularExpression('/\d/', $password);
         $this->assertMatchesRegularExpression('/[!@#$%^&*]/', $password);
+    }
+
+    public static function escapeshellargLinuxProvider()
+    {
+        return [
+            'Basic string'                   => ['hello', "'hello'"],
+            'String with single quotes'      => ["It's a test", "'It'\\''s a test'"],
+            'String with special characters' => ['!@#$%^&*()_+', "'!@#$%^&*()_+'"],
+            'String with spaces'             => ['Hello World', "'Hello World'"],
+            'String with newlines'           => ["Hello\nWorld", "'Hello\nWorld'"],
+            'String with tabs'               => ["Hello\tWorld", "'Hello\tWorld'"],
+            'String with control characters' => ["Hello\x01World", "'Hello\x01World'"],
+            'Empty string'                   => ['', "''"],
+            'Non-string input'               => [123, "'123'"],
+        ];
+    }
+
+    #[DataProvider('escapeshellargLinuxProvider')]
+    public function testEscapeshellargLinux($input, $expected)
+    {
+        $this->assertEquals($expected, DropletManager\escapeshellarg_linux($input));
+    }
+
+    public function testEscapeshellargLinuxWithNullByteThrowsException()
+    {
+        $this->expectException(\ValueError::class);
+        DropletManager\escapeshellarg_linux("Hello\0World");
     }
 }

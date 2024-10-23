@@ -238,3 +238,25 @@ function generate_password(int $length = 8, bool $include_numbers = true, bool $
     // Shuffle the password to ensure randomness
     return str_shuffle($password);
 }
+
+/**
+ * Escapes a string for use in a shell command executed on Linux.
+ *
+ * escapeshellarg() works differently when run on Windows. This function attempts to mimic
+ * the behavior of Linux's escapeshellarg().
+ *
+ * @param string $arg The argument to be escaped.
+ *
+ * @throws \ValueError If the argument contains null bytes.
+ *
+ * @return string The escaped argument.
+ */
+function escapeshellarg_linux(string $arg): string
+{
+    if (strpos($arg, "\0") !== false) {
+        throw new \ValueError('Argument must not contain any null bytes');
+    }
+
+    // Core Linux shell escaping: wrap in single quotes, escape internal quotes
+    return "'" . str_replace("'", "'\\''", $arg) . "'";
+}

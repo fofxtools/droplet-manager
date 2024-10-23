@@ -1276,4 +1276,42 @@ EOF',
             return false;
         }
     }
+
+    /**
+     * Enables API access for a CyberPanel user by updating the MySQL database.
+     *
+     * @param string $username The username for which API access should be enabled. Defaults to 'admin'.
+     *
+     * @throws \Exception If SSH connection fails or command execution fails.
+     *
+     * @return bool True if successful, false otherwise.
+     */
+    public function enableCyberPanelApiAccess(string $username = 'admin'): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        // Construct the SQL command to enable API access
+        $mysqlRootPassword = escapeshellarg_linux($this->config[$this->dropletName]['mysql_root_password']);
+        $escapedUsername   = escapeshellarg_linux($username);
+        $sqlCommand        = sprintf(
+            'mysql -uroot -p%s -e "UPDATE cyberpanel.loginSystem_administrator SET api = 1 WHERE userName = %s;"',
+            $mysqlRootPassword,
+            $escapedUsername
+        );
+
+        // Execute the SQL command via SSH
+        $output = $this->sshConnection->exec($sqlCommand);
+
+        // Check if the command was successful
+        if ($output !== '') {
+            $this->logger->error("Failed to enable API access for user {$username}. Output: {$output}");
+
+            return false;
+        }
+
+        $this->logger->info("API access enabled for user {$username}");
+
+        return true;
+    }
 }

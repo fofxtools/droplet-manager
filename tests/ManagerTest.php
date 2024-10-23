@@ -2285,4 +2285,94 @@ class ManagerTest extends TestCase
 
         $this->manager->updateNanoCtrlFSearchBinding();
     }
+
+    public function testEnableCyberPanelApiAccessSuccess()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Set up the expectation for the exec method
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->with($this->stringContains("UPDATE cyberpanel.loginSystem_administrator SET api = 1 WHERE userName = 'admin'"))
+            ->willReturn('');  // An empty string indicates success
+
+        // Call the method
+        $result = $this->manager->enableCyberPanelApiAccess();
+
+        // Assert that the method returns true on success
+        $this->assertTrue($result);
+    }
+
+    public function testEnableCyberPanelApiAccessFailure()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Set up the expectation for the exec method
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturn('Error: Access denied');  // Simulate an error
+
+        // Call the method
+        $result = $this->manager->enableCyberPanelApiAccess();
+
+        // Assert that the method returns false on failure
+        $this->assertFalse($result);
+    }
+
+    public function testEnableCyberPanelApiAccessCustomUsername()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Set up the expectation for the exec method with a custom username
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->with($this->stringContains("UPDATE cyberpanel.loginSystem_administrator SET api = 1 WHERE userName = 'customuser'"))
+            ->willReturn('');  // An empty string indicates success
+
+        // Call the method with a custom username
+        $result = $this->manager->enableCyberPanelApiAccess('customuser');
+
+        // Assert that the method returns true on success
+        $this->assertTrue($result);
+    }
+
+    public function testEnableCyberPanelApiAccessSshConnectionFailure()
+    {
+        // Configure the SSH mock to return false for login
+        $this->sshMock->method('login')->willReturn(false);
+
+        // Expect an exception to be thrown
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Login failed.');
+
+        // Call the method
+        $this->manager->enableCyberPanelApiAccess();
+    }
+
+    public function testEnableCyberPanelApiAccessEscapesUsername()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Set up the expectation for the exec method with a username that needs escaping
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->with($this->callback(function ($command) {
+                $expectedPart         = "UPDATE cyberpanel.loginSystem_administrator SET api = 1 WHERE userName = 'user'\\''name'";
+                $containsExpectedPart = strpos($command, $expectedPart) !== false;
+                $this->assertTrue($containsExpectedPart, "Command does not contain expected SQL: $expectedPart");
+
+                return $containsExpectedPart;
+            }))
+            ->willReturn('');  // An empty string indicates success
+
+        // Call the method with a username that needs escaping
+        $result = $this->manager->enableCyberPanelApiAccess("user'name");
+
+        // Assert that the method returns true on success
+        $this->assertTrue($result);
+    }
 }
