@@ -37,6 +37,7 @@ class ManagerTest extends TestCase
     private $mockNamecheapApi;
     private $domainsDnsMock;
     private $managerForDnsTests;
+    private $managerMock;
 
     /**
      * Setup the Manager instance with a mock configuration before each test.
@@ -92,6 +93,26 @@ class ManagerTest extends TestCase
 
         // Inject the mock SSH connection
         $this->manager->setSshConnection($this->sshMock);
+
+        // Create a partial mock of Manager
+        $this->managerMock = $this->getMockBuilder(Manager::class)
+            ->setConstructorArgs(['test-droplet', $this->mockConfig, $this->mockClient, $this->mockLogger])
+            ->onlyMethods([
+                'configureDns',
+                'getUsers',
+                'getWebsites',
+                'getDatabases',
+                'createHtaccessForHttpsRedirect',
+                'createDatabase',
+                'grantRemoteDatabaseAccess',
+                'setUserPasswordSsh',
+                'enableSymlinksForDomain',
+                'connectCyberLink',
+            ])
+            ->getMock();
+
+        // Inject the mock SSH connection into the mock Manager
+        $this->managerMock->setSshConnection($this->sshMock);
     }
 
     /**
@@ -125,6 +146,10 @@ class ManagerTest extends TestCase
         $cyberLinkProperty = $reflection->getProperty('cyberLinkConnection');
         $cyberLinkProperty->setAccessible(true);
         $cyberLinkProperty->setValue($this->managerWithCyberLink, $this->cyberLinkMock);
+
+        // Configure the managerMock to return the cyberLinkMock when connectCyberLink is called
+        $this->managerMock->method('connectCyberLink')
+            ->willReturn($this->cyberLinkMock);
     }
 
     /**
@@ -659,9 +684,8 @@ class ManagerTest extends TestCase
     }
 
     /**
-     * Test getDatabases returns an array of databases.
-    /**
      * Test getDatabases handles empty array.
+     */
     public function testGetDatabasesHandlesEmptyArray()
     {
         $this->setUpWithCyberLink();
@@ -1668,6 +1692,404 @@ class ManagerTest extends TestCase
 
         $result = $manager->updateNameserversGodaddy($domain, $nameservers);
         $this->assertFalse($result);
+    }
+
+    public function testSetupWebsiteSuccess()
+    {
+        $this->setUpWithCyberLink();
+
+        $domainName = 'example.com';
+        $username   = 'testuser';
+        $password   = 'testpassword';
+
+        // Mock SSH connection
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Mock CyberLink methods
+        $this->cyberLinkMock->method('createUser')->willReturn(true);
+        $this->cyberLinkMock->method('createWebsite')->willReturn(true);
+        $this->cyberLinkMock->method('issueSSL')->willReturn(true);
+
+        // Mock Manager methods
+        $this->managerMock->expects($this->once())->method('configureDns');
+        $this->managerMock->expects($this->once())->method('getUsers')->willReturn([]);
+        $this->managerMock->expects($this->once())->method('getWebsites')->willReturn([]);
+        $this->managerMock->expects($this->once())->method('getDatabases')->willReturn([]);
+        $this->managerMock->expects($this->once())->method('createHtaccessForHttpsRedirect')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('createDatabase')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('grantRemoteDatabaseAccess')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('setUserPasswordSsh')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('enableSymlinksForDomain')->willReturn(true);
+
+        // Expectations for logging
+        $expectedLogs = [
+            "Configuring DNS for {$domainName}",
+            "DNS configured successfully for {$domainName}",
+            "Creating user {$username}",
+            "User {$username} created successfully",
+            "Creating website for domain {$domainName}",
+            "Website for {$domainName} created successfully",
+            "Redirecting {$domainName} to HTTPS",
+            "HTTPS redirection configured for {$domainName}",
+            "Issuing SSL certificate for {$domainName}",
+            "SSL certificate issued for {$domainName}",
+            "Creating database for {$domainName}",
+            "Database for {$domainName} created successfully",
+            "Enabling external access to the database for {$username}",
+            "External database access granted for {$username}",
+            "Setting user {$username} SSH password for domain {$domainName}",
+            "User {$username} SSH password set for {$domainName}",
+            "Unrestraining symbolic links for {$domainName}",
+            "Symbolic links unrestrained for {$domainName}",
+        ];
+
+        $this->mockLogger->expects($this->exactly(count($expectedLogs)))
+            ->method('info')
+            ->willReturnCallback(function ($message) use (&$expectedLogs) {
+                $this->assertContains($message, $expectedLogs);
+                $expectedLogs = array_diff($expectedLogs, [$message]);
+            });
+
+        // Call the method
+        $this->managerMock->setupWebsite($domainName, false, 'test@example.com', 'John', 'Doe', 'john@example.com', $username, $password);
+
+        // Assert that all expected logs were called
+        $this->assertEmpty($expectedLogs, 'Not all expected logs were called');
+    }
+
+    public function testSetupWebsiteUserExists()
+    {
+        $this->setUpWithCyberLink();
+
+        $domainName = 'example.com';
+        $username   = 'existinguser';
+        $password   = 'testpassword';
+
+        // Mock SSH connection
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Mock Manager methods
+        $this->managerMock->expects($this->once())->method('configureDns');
+        $this->managerMock->expects($this->once())->method('getUsers')->willReturn([$username]);
+        $this->managerMock->expects($this->once())->method('getWebsites')->willReturn([]);
+        $this->managerMock->expects($this->once())->method('getDatabases')->willReturn([]);
+        $this->managerMock->expects($this->once())->method('createHtaccessForHttpsRedirect')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('createDatabase')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('grantRemoteDatabaseAccess')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('setUserPasswordSsh')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('enableSymlinksForDomain')->willReturn(true);
+
+        // Mock CyberLink methods
+        $this->cyberLinkMock->method('createWebsite')->willReturn(true);
+        $this->cyberLinkMock->method('issueSSL')->willReturn(true);
+
+        // Expectations for logging
+        $expectedLogs = [
+            "Configuring DNS for {$domainName}",
+            "DNS configured successfully for {$domainName}",
+            "User {$username} already exists",
+            "Creating website for domain {$domainName}",
+            "Website for {$domainName} created successfully",
+            "Redirecting {$domainName} to HTTPS",
+            "HTTPS redirection configured for {$domainName}",
+            "Issuing SSL certificate for {$domainName}",
+            "SSL certificate issued for {$domainName}",
+            "Creating database for {$domainName}",
+            "Database for {$domainName} created successfully",
+            "Enabling external access to the database for {$username}",
+            "External database access granted for {$username}",
+            "Setting user {$username} SSH password for domain {$domainName}",
+            "User {$username} SSH password set for {$domainName}",
+            "Unrestraining symbolic links for {$domainName}",
+            "Symbolic links unrestrained for {$domainName}",
+        ];
+
+        $this->mockLogger->expects($this->exactly(count($expectedLogs)))
+            ->method('info')
+            ->willReturnCallback(function ($message) use (&$expectedLogs) {
+                $this->assertContains($message, $expectedLogs);
+                $expectedLogs = array_diff($expectedLogs, [$message]);
+            });
+
+        // Call the method
+        $this->managerMock->setupWebsite($domainName, false, 'test@example.com', 'John', 'Doe', 'john@example.com', $username, $password);
+
+        // Assert that all expected logs were called
+        $this->assertEmpty($expectedLogs, 'Not all expected logs were called');
+    }
+
+    public function testSetupWebsiteWebsiteExists()
+    {
+        $this->setUpWithCyberLink();
+
+        $domainName = 'example.com';
+        $username   = 'testuser';
+        $password   = 'testpassword';
+
+        // Mock SSH connection
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Mock Manager methods
+        $this->managerMock->expects($this->once())->method('configureDns');
+        $this->managerMock->expects($this->once())->method('getUsers')->willReturn([]);
+        $this->managerMock->expects($this->once())->method('getWebsites')->willReturn([$domainName]);
+        $this->managerMock->expects($this->once())->method('getDatabases')->willReturn([]);
+        $this->managerMock->expects($this->once())->method('createHtaccessForHttpsRedirect')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('createDatabase')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('grantRemoteDatabaseAccess')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('setUserPasswordSsh')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('enableSymlinksForDomain')->willReturn(true);
+
+        // Mock CyberLink methods
+        $this->cyberLinkMock->method('createUser')->willReturn(true);
+        $this->cyberLinkMock->method('issueSSL')->willReturn(true);
+
+        // Expectations for logging
+        $expectedLogs = [
+            "Configuring DNS for {$domainName}",
+            "DNS configured successfully for {$domainName}",
+            "Creating user {$username}",
+            "User {$username} created successfully",
+            "Website {$domainName} already exists",
+            "Redirecting {$domainName} to HTTPS",
+            "HTTPS redirection configured for {$domainName}",
+            "Issuing SSL certificate for {$domainName}",
+            "SSL certificate issued for {$domainName}",
+            "Creating database for {$domainName}",
+            "Database for {$domainName} created successfully",
+            "Enabling external access to the database for {$username}",
+            "External database access granted for {$username}",
+            "Setting user {$username} SSH password for domain {$domainName}",
+            "User {$username} SSH password set for {$domainName}",
+            "Unrestraining symbolic links for {$domainName}",
+            "Symbolic links unrestrained for {$domainName}",
+        ];
+
+        $this->mockLogger->expects($this->exactly(count($expectedLogs)))
+            ->method('info')
+            ->willReturnCallback(function ($message) use (&$expectedLogs) {
+                $this->assertContains($message, $expectedLogs);
+                $expectedLogs = array_diff($expectedLogs, [$message]);
+            });
+
+        // Call the method
+        $this->managerMock->setupWebsite($domainName, false, 'test@example.com', 'John', 'Doe', 'john@example.com', $username, $password);
+
+        // Assert that all expected logs were called
+        $this->assertEmpty($expectedLogs, 'Not all expected logs were called');
+    }
+
+    public function testSetupWebsiteDatabaseExists()
+    {
+        $this->setUpWithCyberLink();
+
+        $domainName = 'example.com';
+        $username   = 'testuser';
+        $password   = 'testpassword';
+        $dbCount    = 1;
+
+        // Mock SSH connection
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Mock Manager methods
+        $this->managerMock->expects($this->once())->method('configureDns');
+        $this->managerMock->expects($this->once())->method('getUsers')->willReturn([]);
+        $this->managerMock->expects($this->once())->method('getWebsites')->willReturn([]);
+        $this->managerMock->expects($this->once())->method('getDatabases')->willReturn(['existing_db']);
+        $this->managerMock->expects($this->once())->method('createHtaccessForHttpsRedirect')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('grantRemoteDatabaseAccess')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('setUserPasswordSsh')->willReturn(true);
+        $this->managerMock->expects($this->once())->method('enableSymlinksForDomain')->willReturn(true);
+
+        // Mock CyberLink methods
+        $this->cyberLinkMock->method('createUser')->willReturn(true);
+        $this->cyberLinkMock->method('createWebsite')->willReturn(true);
+        $this->cyberLinkMock->method('issueSSL')->willReturn(true);
+
+        // Expectations for logging
+        $expectedLogs = [
+            "Configuring DNS for {$domainName}",
+            "DNS configured successfully for {$domainName}",
+            "Creating user {$username}",
+            "User {$username} created successfully",
+            "Creating website for domain {$domainName}",
+            "Website for {$domainName} created successfully",
+            "Redirecting {$domainName} to HTTPS",
+            "HTTPS redirection configured for {$domainName}",
+            "Issuing SSL certificate for {$domainName}",
+            "SSL certificate issued for {$domainName}",
+            "Database(s) for {$domainName} already exist. Count: {$dbCount}.",
+            "Enabling external access to the database for {$username}",
+            "External database access granted for {$username}",
+            "Setting user {$username} SSH password for domain {$domainName}",
+            "User {$username} SSH password set for {$domainName}",
+            "Unrestraining symbolic links for {$domainName}",
+            "Symbolic links unrestrained for {$domainName}",
+        ];
+
+        $this->mockLogger->expects($this->exactly(count($expectedLogs)))
+            ->method('info')
+            ->willReturnCallback(function ($message) use (&$expectedLogs) {
+                $this->assertContains($message, $expectedLogs);
+                $expectedLogs = array_diff($expectedLogs, [$message]);
+            });
+
+        // Call the method
+        $this->managerMock->setupWebsite($domainName, false, 'test@example.com', 'John', 'Doe', 'john@example.com', $username, $password);
+
+        // Assert that all expected logs were called
+        $this->assertEmpty($expectedLogs, 'Not all expected logs were called');
+    }
+
+    public function testSetupWebsiteFailure()
+    {
+        $this->setUpWithCyberLink();
+
+        $domainName = 'example.com';
+        $username   = 'testuser';
+        $password   = 'testpassword';
+
+        // Mock SSH connection
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Mock Manager methods
+        $this->managerMock->expects($this->once())->method('configureDns');
+        $this->managerMock->expects($this->once())->method('getUsers')->willReturn([]);
+        $this->managerMock->expects($this->once())->method('getWebsites')->willReturn([]);
+        $this->managerMock->expects($this->once())->method('getDatabases')->willReturn([]);
+        $this->managerMock->expects($this->once())->method('createHtaccessForHttpsRedirect')->willReturn(false);
+        $this->managerMock->expects($this->once())->method('createDatabase')->willReturn(false);
+        $this->managerMock->expects($this->once())->method('grantRemoteDatabaseAccess')->willReturn(false);
+        $this->managerMock->expects($this->once())->method('setUserPasswordSsh')->willReturn(false);
+        $this->managerMock->expects($this->once())->method('enableSymlinksForDomain')->willReturn(false);
+
+        // Mock CyberLink methods
+        $this->cyberLinkMock->method('createUser')->willReturn(false);
+        $this->cyberLinkMock->method('createWebsite')->willReturn(false);
+        $this->cyberLinkMock->method('issueSSL')->willReturn(false);
+
+        // Expectations for logging
+        $expectedErrors = [
+            "Failed to create user {$username}",
+            "Failed to create website for {$domainName}",
+            "Failed to configure HTTPS redirection for {$domainName}",
+            "Failed to issue SSL certificate for {$domainName}",
+            "Failed to create database for {$domainName}",
+            "Failed to grant external access to the database for {$username}",
+            "Failed to set {$username} SSH password for {$domainName}",
+            "Failed to unrestrain symbolic links for {$domainName}",
+        ];
+
+        $this->mockLogger->expects($this->exactly(count($expectedErrors)))
+            ->method('error')
+            ->willReturnCallback(function ($message) use (&$expectedErrors) {
+                $this->assertContains($message, $expectedErrors);
+                $expectedErrors = array_diff($expectedErrors, [$message]);
+            });
+
+        // Call the method
+        $this->managerMock->setupWebsite($domainName, false, 'test@example.com', 'John', 'Doe', 'john@example.com', $username, $password);
+
+        // Assert that all expected errors were logged
+        $this->assertEmpty($expectedErrors, 'Not all expected errors were logged');
+    }
+
+    public function testDeleteWebsiteSuccess()
+    {
+        $this->setUpWithCyberLink();
+
+        $domainName = 'example.com';
+
+        // Configure the mock to return true for a successful website deletion
+        $this->cyberLinkMock->method('deleteWebsite')
+            ->with($domainName, false)
+            ->willReturn(true);
+
+        // Set up expectations for logging
+        $expectedLogs = [
+            "Deleting website for {$domainName}",
+            "Website for {$domainName} deleted successfully",
+        ];
+
+        $this->mockLogger->expects($this->exactly(count($expectedLogs)))
+            ->method('info')
+            ->willReturnCallback(function ($message) use (&$expectedLogs) {
+                $this->assertContains($message, $expectedLogs);
+                $expectedLogs = array_diff($expectedLogs, [$message]);
+            });
+
+        // Call the method
+        $result = $this->managerWithCyberLink->deleteWebsite($domainName);
+
+        // Assert that the result is true
+        $this->assertTrue($result);
+
+        // Assert that all expected logs were called
+        $this->assertEmpty($expectedLogs, 'Not all expected logs were called');
+    }
+
+    public function testDeleteWebsiteFailure()
+    {
+        $this->setUpWithCyberLink();
+
+        $domainName = 'example.com';
+
+        // Configure the mock to return false for a failed website deletion
+        $this->cyberLinkMock->method('deleteWebsite')
+            ->with($domainName, false)
+            ->willReturn(false);
+
+        // Set up expectations for logging
+        $expectedLogs = [
+            "Deleting website for {$domainName}"         => 'info',
+            "Failed to delete website for {$domainName}" => 'error',
+        ];
+
+        foreach ($expectedLogs as $message => $method) {
+            $this->mockLogger->expects($this->once())
+                ->method($method)
+                ->with($message);
+        }
+
+        // Call the method
+        $result = $this->managerWithCyberLink->deleteWebsite($domainName);
+
+        // Assert that the result is false
+        $this->assertFalse($result);
+    }
+
+    public function testDeleteWebsiteWithDebugEnabled()
+    {
+        $this->setUpWithCyberLink();
+
+        $domainName = 'example.com';
+
+        // Configure the mock to return true for a successful website deletion with debug enabled
+        $this->cyberLinkMock->method('deleteWebsite')
+            ->with($domainName, true)
+            ->willReturn(true);
+
+        // Set up expectations for logging
+        $expectedLogs = [
+            "Deleting website for {$domainName}",
+            "Website for {$domainName} deleted successfully",
+        ];
+
+        $this->mockLogger->expects($this->exactly(count($expectedLogs)))
+            ->method('info')
+            ->willReturnCallback(function ($message) use (&$expectedLogs) {
+                $this->assertContains($message, $expectedLogs);
+                $expectedLogs = array_diff($expectedLogs, [$message]);
+            });
+
+        // Call the method with debug enabled
+        $result = $this->managerWithCyberLink->deleteWebsite($domainName, true);
+
+        // Assert that the result is true
+        $this->assertTrue($result);
+
+        // Assert that all expected logs were called
+        $this->assertEmpty($expectedLogs, 'Not all expected logs were called');
     }
 
     public function testUpdateMyCnfPasswordSuccess()

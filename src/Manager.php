@@ -1108,7 +1108,7 @@ EOF',
         if ($this->setUserPasswordSsh($domainName, $password)) {
             $this->logger->info("User {$username} SSH password set for {$domainName}");
         } else {
-            $this->logger->error("Failed to set {username} SSH password for {$domainName}");
+            $this->logger->error("Failed to set {$username} SSH password for {$domainName}");
         }
 
         // Unrestrain Symbolic Links
