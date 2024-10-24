@@ -108,6 +108,7 @@ class ManagerTest extends TestCase
                 'setUserPasswordSsh',
                 'enableSymlinksForDomain',
                 'connectCyberLink',
+                'restartLiteSpeed',
             ])
             ->getMock();
 
@@ -2374,5 +2375,86 @@ class ManagerTest extends TestCase
 
         // Assert that the method returns true on success
         $this->assertTrue($result);
+    }
+
+    public function testUpdateVhostPySuccess()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Simulate the sequence of exec calls
+        $this->sshMock->expects($this->exactly(5))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',        // grep for replacement line (not found)
+                'exists',  // grep for original line (found)
+                '',        // cp command for backup (success)
+                '',        // sed command for replacement (success)
+                'updated'  // grep for replacement line after sed (found)
+            );
+
+        // Mock the restartLiteSpeed method to return a successful message
+        $this->managerMock->method('restartLiteSpeed')->willReturn('[OK] Send SIGUSR1 to 80579');
+
+        // Inject the mock SSH connection
+        $this->managerMock->setSshConnection($this->sshMock);
+
+        // Call the method
+        $result = $this->managerMock->updateVhostPy();
+
+        // Assert that the method returns true on success
+        $this->assertTrue($result);
+    }
+
+    public function testUpdateVhostPyNoChangeNeeded()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Simulate the grep command finding the replacement line already present
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturn('exists');  // grep for replacement line (found)
+
+        // Inject the mock SSH connection
+        $this->managerMock->setSshConnection($this->sshMock);
+
+        // Call the method
+        $result = $this->managerMock->updateVhostPy();
+
+        // Assert that the method returns true since no changes are needed
+        $this->assertTrue($result);
+    }
+
+    public function testUpdateVhostPyOriginalLineNotFound()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Simulate the grep command not finding the original line
+        $this->sshMock->expects($this->exactly(2))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // grep for replacement line (not found)
+                ''   // grep for original line (not found)
+            );
+
+        // Call the method
+        $result = $this->manager->updateVhostPy();
+
+        // Assert that the method returns false since the original line was not found
+        $this->assertFalse($result);
+    }
+
+    public function testUpdateVhostPySshConnectionFailure()
+    {
+        // Configure the SSH mock to fail login
+        $this->sshMock->method('login')->willReturn(false);
+
+        // Call the method
+        $result = $this->manager->updateVhostPy();
+
+        // Assert that the method returns false due to SSH connection failure
+        $this->assertFalse($result);
     }
 }

@@ -260,3 +260,19 @@ function escapeshellarg_linux(string $arg): string
     // Core Linux shell escaping: wrap in single quotes, escape internal quotes
     return "'" . str_replace("'", "'\\''", $arg) . "'";
 }
+
+/**
+ * Escapes single quotes for use in sed commands.
+ *
+ * This function replaces single quotes with the escaped sequence '\''.
+ * This is necessary for safely using strings in sed commands.
+ *
+ * @param string $string The string to escape.
+ *
+ * @return string The escaped string.
+ */
+function escape_single_quotes_for_sed(string $string): string
+{
+    // The backslash is escaped as \\ to represent a literal backslash in the replacement string.
+    return str_replace("'", "'\\''", $string);
+}

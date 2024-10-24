@@ -868,7 +868,19 @@ EOF',
     {
         $cyber = $this->connectCyberLink();
 
-        return $cyber->restartLiteSpeed();
+        $this->logger->info('Restarting LiteSpeed...');
+        $result = $cyber->restartLiteSpeed();
+
+        // Check if the result contains "[OK]" which indicates a successful restart
+        if (stripos($result, '[OK]') !== false) {
+            $this->logger->info('LiteSpeed restarted successfully.');
+        } else {
+            $this->logger->error('Failed to restart LiteSpeed.', [
+                'result' => $result,
+            ]);
+        }
+
+        return $result;
     }
 
     /**
@@ -1313,5 +1325,82 @@ EOF',
         $this->logger->info("API access enabled for user {$username}");
 
         return true;
+    }
+
+    /**
+     * Update vhost.py to modify the open_basedir replacement using grep and sed.
+     *
+     * @param bool $restartLiteSpeed Whether to restart LiteSpeed after updating vhost.py.
+     *
+     * @return bool Returns true if changes were made, false otherwise.
+     */
+    public function updateVhostPy($restartLiteSpeed = true): bool
+    {
+        $filePath = '/usr/local/CyberCP/plogical/vhost.py';
+
+        try {
+            // Ensure SSH connection is established
+            $this->verifyConnectionSsh();
+
+            $backupPath = $filePath . '.bak_' . date('Ymd_His');
+
+            $openBasedirOriginal    = '\'{open_basedir}\', \'php_admin_value open_basedir "/tmp:$VH_ROOT"\'';
+            $openBasedirReplacement = '\'{open_basedir}\', \'php_admin_value open_basedir "/tmp:$VH_ROOT:/usr/local/lsws/share/autoindex:/proc"\'';
+
+            // Use grep to check if the replacement line already exists
+            $grepCommand           = 'grep -q ' . escapeshellarg_linux($openBasedirReplacement) . " $filePath && echo 'exists'";
+            $replacementLineExists = trim($this->sshConnection->exec($grepCommand));
+
+            // If the replacement line is already present, no changes are needed
+            if ($replacementLineExists === 'exists') {
+                $this->logger->info("$filePath already contains the replacement line. No changes needed.");
+
+                return true;
+            }
+
+            // Else check if the original line exists
+            $grepCommand        = 'grep -q ' . escapeshellarg_linux($openBasedirOriginal) . " $filePath && echo 'exists'";
+            $originalLineExists = trim($this->sshConnection->exec($grepCommand));
+
+            // If the original line is present, back up the file and replace the line
+            if ($originalLineExists === 'exists') {
+                $this->logger->info("Creating backup of $filePath at: $backupPath");
+                $this->sshConnection->exec("cp $filePath $backupPath");
+
+                // Use sed to replace the original line with the replacement line
+                $sedOriginal    = escape_single_quotes_for_sed($openBasedirOriginal);
+                $sedReplacement = escape_single_quotes_for_sed($openBasedirReplacement);
+                $sedCommand     = "sed -i 's#{$sedOriginal}#{$sedReplacement}#' $filePath";
+                $this->logger->info("Executing sed command: $sedCommand");
+                $this->sshConnection->exec($sedCommand);
+
+                // Use grep to verify the replacement
+                $grepCommand       = 'grep -q ' . escapeshellarg_linux($openBasedirReplacement) . " $filePath && echo 'updated'";
+                $verificationCheck = trim($this->sshConnection->exec($grepCommand));
+
+                if ($verificationCheck === 'updated') {
+                    $this->logger->info("$filePath updated successfully.");
+
+                    // Restart OpenLiteSpeed if required
+                    if ($restartLiteSpeed) {
+                        $this->restartLiteSpeed();
+                    }
+
+                    return true;
+                } else {
+                    $this->logger->error("Failed to verify the replacement in $filePath.");
+
+                    return false;
+                }
+            } else {
+                $this->logger->error("$filePath does not contain the original line to modify. Replacement not possible.");
+
+                return false;
+            }
+        } catch (\Exception $e) {
+            $this->logger->error("Failed to update $filePath: " . $e->getMessage());
+
+            return false;
+        }
     }
 }

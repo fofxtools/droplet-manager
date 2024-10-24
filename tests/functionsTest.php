@@ -202,4 +202,23 @@ class FunctionsTest extends TestCase
         $this->expectException(\ValueError::class);
         DropletManager\escapeshellarg_linux("Hello\0World");
     }
+
+    public static function escapeSingleQuotesForSedProvider()
+    {
+        return [
+            ["It's a test", "It'\\''s a test"],
+            ['No quotes here', 'No quotes here'],
+            ["Multiple'quotes'in'a'row", "Multiple'\\''quotes'\\''in'\\''a'\\''row"],
+            ["'", "'\\''"],
+            ["''", "'\\'''\\''"],
+            ["'''", "'\\'''\\'''\\''"],
+            ["Ends with quote'", "Ends with quote'\\''"],
+        ];
+    }
+
+    #[DataProvider('escapeSingleQuotesForSedProvider')]
+    public function testEscapeSingleQuotesForSed($input, $expected)
+    {
+        $this->assertEquals($expected, DropletManager\escape_single_quotes_for_sed($input));
+    }
 }

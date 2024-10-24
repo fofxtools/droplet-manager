@@ -43,7 +43,7 @@ $domain = '022679.xyz';
 
 //$manager->enableSymlinksForDomain($domain);
 
-//echo $manager->restartLiteSpeed();
+//var_dump($manager->restartLiteSpeed());
 
 //var_dump($manager->updateNameserversNamecheap($domain));
 
@@ -51,10 +51,10 @@ $domain = '022679.xyz';
 
 //print_r($cyberLink->listUsers());
 
+//var_dump($manager->deleteWebsite($domain, true));
 //$manager->setupWebsite($domain, true);
-//$manager->deleteWebsite($domain, true);
 
-//$manager->updateMyCnfPassword();
+//var_dump($manager->updateMyCnfPassword());
 //var_dump($manager->enableCyberPanelApiAccess());
 
-echo DropletManager\escapeshellarg_linux("user'name");
+//var_dump($manager->updateVhostPy());
