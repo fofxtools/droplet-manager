@@ -221,4 +221,71 @@ class FunctionsTest extends TestCase
     {
         $this->assertEquals($expected, DropletManager\escape_single_quotes_for_sed($input));
     }
+
+    public static function trimIfStringProvider()
+    {
+        // For callable expected values, is_callable() is used to check the result
+        return [
+            'Trims string'               => ['  Hello, World!  ', 'Hello, World!'],
+            'Trims string with tabs'     => ["\tHello, World!\t", 'Hello, World!'],
+            'Trims string with newlines' => ["\nHello, World!\n", 'Hello, World!'],
+            'Already trimmed string'     => ['Hello, World!', 'Hello, World!'],
+            'Empty string'               => ['', ''],
+            'String of spaces'           => ['     ', ''],
+            'Integer'                    => [42, 42],
+            'Float'                      => [3.14, 3.14],
+            'Boolean true'               => [true, true],
+            'Boolean false'              => [false, false],
+            'Null'                       => [null, null],
+            'Array'                      => [[1, 2, 3], [1, 2, 3]],
+            'Object'                     => [new \stdClass(), new \stdClass()],
+            'Resource'                   => [fopen('php://memory', 'r'), function ($value) {
+                return is_resource($value);
+            }],
+            'Closure' => [function () {}, function ($value) {
+                return $value instanceof \Closure;
+            }],
+        ];
+    }
+
+    #[DataProvider('trimIfStringProvider')]
+    public function testTrimIfString($input, $expected)
+    {
+        $result = DropletManager\trim_if_string($input);
+
+        if (is_callable($expected)) {
+            $this->assertTrue($expected($result));
+        } elseif (is_object($expected)) {
+            $this->assertEquals(get_class($expected), get_class($result));
+        } else {
+            $this->assertSame($expected, $result);
+        }
+    }
+
+    public function testTrimIfStringWithCustomObject()
+    {
+        $obj = new class () {
+            public $property = 'value';
+        };
+
+        $result = DropletManager\trim_if_string($obj);
+
+        $this->assertInstanceOf(get_class($obj), $result);
+        $this->assertSame('value', $result->property);
+    }
+
+    public function testTrimIfStringWithStringable()
+    {
+        $stringable = new class () implements \Stringable {
+            public function __toString()
+            {
+                return '  Stringable  ';
+            }
+        };
+
+        $result = DropletManager\trim_if_string($stringable);
+
+        $this->assertInstanceOf(get_class($stringable), $result);
+        $this->assertSame('  Stringable  ', (string)$result);
+    }
 }

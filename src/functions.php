@@ -276,3 +276,18 @@ function escape_single_quotes_for_sed(string $string): string
     // The backslash is escaped as \\ to represent a literal backslash in the replacement string.
     return str_replace("'", "'\\''", $string);
 }
+
+/**
+ * Trim the input if it is a string, otherwise return the input as is.
+ *
+ * Can be useful since trim() may modify types, for instance trimming a Boolean false
+ * gives an empty string instead of the Boolean false value.
+ *
+ * @param mixed $input The input to trim.
+ *
+ * @return mixed The trimmed input or the original input if it is not a string.
+ */
+function trim_if_string(mixed $input): mixed
+{
+    return is_string($input) ? trim($input) : $input;
+}

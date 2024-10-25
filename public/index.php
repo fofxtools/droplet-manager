@@ -51,10 +51,11 @@ $domain = '022679.xyz';
 
 //print_r($cyberLink->listUsers());
 
-//var_dump($manager->deleteWebsite($domain, true));
-//$manager->setupWebsite($domain, true);
-
 //var_dump($manager->updateMyCnfPassword());
 //var_dump($manager->enableCyberPanelApiAccess());
 
 //var_dump($manager->updateVhostPy());
+//var_dump($manager->updateVhostConfsPy());
+
+//var_dump($manager->deleteWebsite($domain, true));
+//$manager->setupWebsite($domain, true);

@@ -552,8 +552,8 @@ class Manager
         $this->verifyConnectionSsh();
 
         // Execute the stat command to get the user owner of the directory
-        $command = sprintf('stat -c "%%U" /home/%s', escapeshellarg($domain));
-        $output  = trim($this->sshConnection->exec($command));
+        $command = sprintf('stat -c "%%U" /home/%s', escapeshellarg_linux($domain));
+        $output  = trim_if_string($this->sshConnection->exec($command));
 
         // Check for error in the command output or empty response
         if (str_contains($output, 'stat: ') || empty($output)) {
@@ -584,12 +584,11 @@ class Manager
         // Ensure SSH connection is established
         $this->verifyConnectionSsh();
 
-        $escapedDomain = escapeshellarg($domainName);
-        $htaccessPath  = "/home/{$domainName}/public_html/.htaccess";
+        $htaccessPath = "/home/{$domainName}/public_html/.htaccess";
 
         // Check if .htaccess already exists
         $checkCommand = "test -f {$htaccessPath} && echo 'exists' || echo 'not exists'";
-        $checkResult  = trim($this->sshConnection->exec($checkCommand));
+        $checkResult  = trim_if_string($this->sshConnection->exec($checkCommand));
 
         if ($checkResult === 'exists') {
             if (!$overwriteHtaccess) {
@@ -639,7 +638,7 @@ EOF',
         }
 
         // Set the correct ownership for the .htaccess file to the domain owner
-        $ownershipCommand = sprintf('chown %s:%s %s', escapeshellarg($username), escapeshellarg($username), $htaccessPath);
+        $ownershipCommand = sprintf('chown %s:%s %s', escapeshellarg_linux($username), escapeshellarg_linux($username), $htaccessPath);
         $ownershipOutput  = $this->sshConnection->exec($ownershipCommand);
 
         if ($ownershipOutput !== '') {
@@ -727,10 +726,10 @@ EOF',
         // Construct the command to grant remote access
         $grantCommand = sprintf(
             "mysql -uroot -p%s -e \"GRANT ALL PRIVILEGES ON %s.* TO '%s'@'%%' IDENTIFIED BY '%s'; FLUSH PRIVILEGES;\"",
-            escapeshellarg($this->config[$this->dropletName]['mysql_root_password']),
-            escapeshellarg($database),
-            escapeshellarg($username),
-            escapeshellarg($password)
+            escapeshellarg_linux($this->config[$this->dropletName]['mysql_root_password']),
+            escapeshellarg_linux($database),
+            escapeshellarg_linux($username),
+            escapeshellarg_linux($password)
         );
 
         // Execute the grant command via SSH
@@ -780,8 +779,8 @@ EOF',
         // Change password
         $changePasswordCommand = sprintf(
             "printf '%%s:%%s' %s %s | sudo chpasswd",
-            escapeshellarg($username),
-            escapeshellarg($newPassword)
+            escapeshellarg_linux($username),
+            escapeshellarg_linux($newPassword)
         );
         $output = $this->sshConnection->exec($changePasswordCommand);
 
@@ -801,7 +800,7 @@ EOF',
 
         // Verify password change
         if ($verifyChange) {
-            $verifyCommand = 'sudo passwd -S ' . escapeshellarg($username);
+            $verifyCommand = 'sudo passwd -S ' . escapeshellarg_linux($username);
             $verifyOutput  = $this->sshConnection->exec($verifyCommand);
 
             // Note: We're still returning true here because the password was likely changed
@@ -1012,6 +1011,23 @@ EOF',
         }
     }
 
+    /**
+     * Sets up a website on CyberPanel.
+     *
+     * @param string      $domainName    The domain name of the website to setup.
+     * @param bool        $debug         Whether to output debug information.
+     * @param string      $websiteEmail  The email address of the website owner.
+     * @param string      $firstName     The first name of the website owner.
+     * @param string      $lastName      The last name of the website owner.
+     * @param string      $userEmail     The email address of the website owner.
+     * @param string      $username      The username of the website owner.
+     * @param string|null $password      The password for the website owner.
+     * @param int         $websitesLimit The maximum number of websites the user can have.
+     * @param string      $package       The package to use for the website.
+     * @param string      $phpVersion    The PHP version to use for the website.
+     *
+     * @return void
+     */
     public function setupWebsite(
         string $domainName,
         bool $debug = false,
@@ -1171,7 +1187,7 @@ EOF',
         $this->verifyConnectionSsh();
 
         // Extract the MySQL root password from /root/.db_password
-        $dbPassword = trim($this->sshConnection->exec("grep -w 'root_mysql_pass' /root/.db_password | cut -d'=' -f2 | tr -d '\"' | sed -n '1p'"));
+        $dbPassword = trim_if_string($this->sshConnection->exec("grep -w 'root_mysql_pass' /root/.db_password | cut -d'=' -f2 | tr -d '\"' | sed -n '1p'"));
         if (empty($dbPassword)) {
             $this->logger->error('Failed to extract the MySQL root password from /root/.db_password');
 
@@ -1179,7 +1195,7 @@ EOF',
         }
 
         // Extract the current password from /root/.my.cnf
-        $myCnfPassword = trim($this->sshConnection->exec("grep 'password=' /root/.my.cnf | cut -d'=' -f2 | tr -d '\"' | sed -n '1p'"));
+        $myCnfPassword = trim_if_string($this->sshConnection->exec("grep 'password=' /root/.my.cnf | cut -d'=' -f2 | tr -d '\"' | sed -n '1p'"));
         if (empty($myCnfPassword)) {
             $this->logger->error('Failed to extract the current password from /root/.my.cnf');
 
@@ -1231,16 +1247,16 @@ EOF',
         $this->verifyConnectionSsh();
 
         // Check if the binding already exists with Ctrl+F
-        $existingBinding = $this->sshConnection->exec("grep '^bind \\^F whereis all' /etc/nanorc");
-        if (trim($existingBinding) !== '') {
+        $existingBinding = trim_if_string($this->sshConnection->exec("grep '^bind \\^F whereis all' /etc/nanorc"));
+        if ($existingBinding !== '') {
             $this->logger->info('The Nano "Where Is" binding is already set to Ctrl+F.');
 
             return true;
         }
 
         // Check if the binding is commented out
-        $commentedBinding = $this->sshConnection->exec("grep '^#.*bind \\^F whereis all' /etc/nanorc");
-        if (trim($commentedBinding) !== '') {
+        $commentedBinding = trim_if_string($this->sshConnection->exec("grep '^#.*bind \\^F whereis all' /etc/nanorc"));
+        if ($commentedBinding !== '') {
             // Uncomment the existing binding
             $uncommentCommand = "sed -i 's/^#\\s*\\(bind \\^F whereis all\\)/\\1/' /etc/nanorc";
             $output           = $this->sshConnection->exec($uncommentCommand);
@@ -1257,8 +1273,8 @@ EOF',
         }
 
         // Check if another key is bound to "whereis all"
-        $otherBinding = $this->sshConnection->exec("grep '^bind \\^[^F] whereis all' /etc/nanorc");
-        if (trim($otherBinding) !== '') {
+        $otherBinding = trim_if_string($this->sshConnection->exec("grep '^bind \\^[^F] whereis all' /etc/nanorc"));
+        if ($otherBinding !== '') {
             // Update the binding to Ctrl+F
             $updateCommand = "sed -i 's/^bind \\^[^F] whereis all/bind \\^F whereis all/' /etc/nanorc";
             $output        = $this->sshConnection->exec($updateCommand);
@@ -1336,69 +1352,150 @@ EOF',
      */
     public function updateVhostPy($restartLiteSpeed = true): bool
     {
-        $filePath = '/usr/local/CyberCP/plogical/vhost.py';
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
 
-        try {
-            // Ensure SSH connection is established
-            $this->verifyConnectionSsh();
+        $filePath   = '/usr/local/CyberCP/plogical/vhost.py';
+        $backupPath = $filePath . '.bak_' . date('Ymd_His');
 
-            $backupPath = $filePath . '.bak_' . date('Ymd_His');
+        $openBasedirOriginal    = '\'{open_basedir}\', \'php_admin_value open_basedir "/tmp:$VH_ROOT"\'';
+        $openBasedirReplacement = '\'{open_basedir}\', \'php_admin_value open_basedir "/tmp:$VH_ROOT:/usr/local/lsws/share/autoindex:/proc"\'';
 
-            $openBasedirOriginal    = '\'{open_basedir}\', \'php_admin_value open_basedir "/tmp:$VH_ROOT"\'';
-            $openBasedirReplacement = '\'{open_basedir}\', \'php_admin_value open_basedir "/tmp:$VH_ROOT:/usr/local/lsws/share/autoindex:/proc"\'';
+        // Use grep to check if the replacement line already exists
+        $grepCommand           = 'grep -q ' . escapeshellarg_linux($openBasedirReplacement) . " $filePath && echo 'exists'";
+        $replacementLineExists = trim_if_string($this->sshConnection->exec($grepCommand));
 
-            // Use grep to check if the replacement line already exists
-            $grepCommand           = 'grep -q ' . escapeshellarg_linux($openBasedirReplacement) . " $filePath && echo 'exists'";
-            $replacementLineExists = trim($this->sshConnection->exec($grepCommand));
+        // If the replacement line is already present, no changes are needed
+        if ($replacementLineExists === 'exists') {
+            $this->logger->info('vhost.py already contains the replacement line. No changes needed.');
 
-            // If the replacement line is already present, no changes are needed
-            if ($replacementLineExists === 'exists') {
-                $this->logger->info("$filePath already contains the replacement line. No changes needed.");
+            return true;
+        }
+
+        // Else check if the original line exists
+        $grepCommand        = 'grep -q ' . escapeshellarg_linux($openBasedirOriginal) . " $filePath && echo 'exists'";
+        $originalLineExists = trim_if_string($this->sshConnection->exec($grepCommand));
+
+        // If the original line is present, back up the file and replace the line
+        if ($originalLineExists === 'exists') {
+            $this->logger->info("Creating backup of vhost.py at: $backupPath");
+            $this->sshConnection->exec("cp $filePath $backupPath");
+
+            // Use sed to replace the original line with the replacement line
+            $sedOriginal    = escape_single_quotes_for_sed($openBasedirOriginal);
+            $sedReplacement = escape_single_quotes_for_sed($openBasedirReplacement);
+            $sedCommand     = "sed -i 's#{$sedOriginal}#{$sedReplacement}#' $filePath";
+            $this->logger->info("Executing sed command: $sedCommand");
+            $this->sshConnection->exec($sedCommand);
+
+            // Use grep to verify the replacement
+            $grepCommand       = 'grep -q ' . escapeshellarg_linux($openBasedirReplacement) . " $filePath && echo 'updated'";
+            $verificationCheck = trim_if_string($this->sshConnection->exec($grepCommand));
+
+            if ($verificationCheck === 'updated') {
+                $this->logger->info('vhost.py updated successfully.');
+
+                // Restart OpenLiteSpeed if required
+                if ($restartLiteSpeed) {
+                    $this->restartLiteSpeed();
+                }
 
                 return true;
-            }
-
-            // Else check if the original line exists
-            $grepCommand        = 'grep -q ' . escapeshellarg_linux($openBasedirOriginal) . " $filePath && echo 'exists'";
-            $originalLineExists = trim($this->sshConnection->exec($grepCommand));
-
-            // If the original line is present, back up the file and replace the line
-            if ($originalLineExists === 'exists') {
-                $this->logger->info("Creating backup of $filePath at: $backupPath");
-                $this->sshConnection->exec("cp $filePath $backupPath");
-
-                // Use sed to replace the original line with the replacement line
-                $sedOriginal    = escape_single_quotes_for_sed($openBasedirOriginal);
-                $sedReplacement = escape_single_quotes_for_sed($openBasedirReplacement);
-                $sedCommand     = "sed -i 's#{$sedOriginal}#{$sedReplacement}#' $filePath";
-                $this->logger->info("Executing sed command: $sedCommand");
-                $this->sshConnection->exec($sedCommand);
-
-                // Use grep to verify the replacement
-                $grepCommand       = 'grep -q ' . escapeshellarg_linux($openBasedirReplacement) . " $filePath && echo 'updated'";
-                $verificationCheck = trim($this->sshConnection->exec($grepCommand));
-
-                if ($verificationCheck === 'updated') {
-                    $this->logger->info("$filePath updated successfully.");
-
-                    // Restart OpenLiteSpeed if required
-                    if ($restartLiteSpeed) {
-                        $this->restartLiteSpeed();
-                    }
-
-                    return true;
-                } else {
-                    $this->logger->error("Failed to verify the replacement in $filePath.");
-
-                    return false;
-                }
             } else {
-                $this->logger->error("$filePath does not contain the original line to modify. Replacement not possible.");
+                $this->logger->error('Failed to verify the replacement in vhost.py.');
 
                 return false;
             }
-        } catch (\Exception $e) {
-            $this->logger->error("Failed to update $filePath: " . $e->getMessage());
+        } else {
+            $this->logger->error('vhost.py does not contain the original line to modify. Replacement not possible.');
+
+            return false;
+        }
+    }
+
+    /**
+     * Updates the vhostConfs.py file by modifying the 'index' block with varying whitespace.
+     *
+     * @param bool $restartLiteSpeed Whether to restart LiteSpeed after updating the file.
+     *
+     * @return bool True if the update is successful, false otherwise.
+     */
+    public function updateVhostConfsPy(bool $restartLiteSpeed = true): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        // File path
+        $filePath   = '/usr/local/CyberCP/plogical/vhostConfs.py';
+        $backupPath = $filePath . '.bak_' . date('Ymd_His');
+
+        // Use regex patterns to handle varying whitespace
+        // sed can not handle \s for whitespace, so we use [:space:] instead
+        $originalPattern    = 'index[[:space:]]*{[[:space:]]*useServer[[:space:]]*0[[:space:]]*indexFiles[[:space:]]*index\.php,[[:space:]]*index\.html[[:space:]]*}';
+        $replacementPattern = 'index[[:space:]]*{[[:space:]]*'
+            . 'useServer[[:space:]]*1[[:space:]]*'
+            . 'indexFiles[[:space:]]*index\.php,[[:space:]]*index\.html[[:space:]]*'
+            . 'autoIndex[[:space:]]*1[[:space:]]*}';
+        $replacementBlock = 'index  {\
+  useServer               1\
+  indexFiles              index.php, index.html\
+  autoIndex               1\
+}';
+
+        // Check if the replacement has already been made
+        // -P is for Perl regex, -z is for multi-line, -q is for quiet mode
+        $grepReplacementCheck = 'grep -Pzq ' . escapeshellarg_linux($replacementPattern) . " $filePath && echo 'exists'";
+        $replacementCheck     = trim_if_string($this->sshConnection->exec($grepReplacementCheck));
+
+        if ($replacementCheck === 'exists') {
+            // Replacement already exists
+            $this->logger->info('Replacement already exists in vhostConfs.py.');
+
+            return true;
+        }
+
+        // Check if the original block is present using regex with sed
+        $grepOriginalCheck = 'grep -Pzq ' . escapeshellarg_linux($originalPattern) . " $filePath && echo 'exists'";
+        $originalCheck     = trim_if_string($this->sshConnection->exec($grepOriginalCheck));
+
+        if ($originalCheck === 'exists') {
+            // Back up the original file
+            $this->logger->info("Creating backup of $filePath at: $backupPath");
+            $backupCommand = "cp $filePath $backupPath";
+            $this->sshConnection->exec($backupCommand);
+
+            // Replace the block using sed with regex support
+            $sedOriginal    = escape_single_quotes_for_sed($originalPattern);
+            $sedReplacement = escape_single_quotes_for_sed($replacementBlock);
+            // Use -z to handle multi-line replacement
+            $sedCommand = "sed -i -z 's#{$sedOriginal}#{$sedReplacement}#' $filePath";
+            // Use trim_if_string(), as trim(false) gives an empty string instead of a Boolean false
+            $sedResult = trim_if_string($this->sshConnection->exec($sedCommand));
+
+            if ($sedResult === false) {
+                $this->logger->error('Failed to modify vhostConfs.py.');
+
+                return false;
+            }
+
+            // Verify the replacement
+            $verifyCommand = 'grep -Pzq ' . escapeshellarg_linux($replacementPattern) . " $filePath && echo 'updated'";
+            $verifyResult  = trim_if_string($this->sshConnection->exec($verifyCommand));
+
+            if ($verifyResult === 'updated') {
+                $this->logger->info('vhostConfs.py updated successfully.');
+                if ($restartLiteSpeed) {
+                    $this->restartLiteSpeed();
+                }
+
+                return true;
+            } else {
+                $this->logger->error('Failed to verify the modification in vhostConfs.py.');
+
+                return false;
+            }
+        } else {
+            $this->logger->error('vhostConfs.py does not contain the original section to modify. Replacement not possible.');
 
             return false;
         }

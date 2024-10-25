@@ -2,6 +2,7 @@
 
 namespace FOfX\DropletManager\Tests;
 
+use FOfX\DropletManager;
 use FOfX\DropletManager\Manager;
 use PHPUnit\Framework\TestCase;
 use phpseclib3\Net\SSH2;
@@ -1269,9 +1270,9 @@ class ManagerTest extends TestCase
         $this->sshMock->expects($this->once())
             ->method('exec')
             ->with($this->logicalAnd(
-                $this->stringContains(escapeshellarg(\FOfX\DropletManager\sanitize_domain_for_database($domainName, $username))),
-                $this->stringContains(escapeshellarg($username)),
-                $this->stringContains(escapeshellarg($password))
+                $this->stringContains(DropletManager\escapeshellarg_linux(\FOfX\DropletManager\sanitize_domain_for_database($domainName, $username))),
+                $this->stringContains(DropletManager\escapeshellarg_linux($username)),
+                $this->stringContains(DropletManager\escapeshellarg_linux($password))
             ))
             ->willReturn('');
 
@@ -2446,15 +2447,168 @@ class ManagerTest extends TestCase
         $this->assertFalse($result);
     }
 
-    public function testUpdateVhostPySshConnectionFailure()
+    public function testUpdateVhostConfsPySuccess()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Simulate the sequence of exec calls
+        $this->sshMock->expects($this->exactly(5))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',        // grep for replacement pattern (not found)
+                'exists',  // grep for original pattern (found)
+                '',        // cp command for backup (success)
+                '',        // sed command for replacement (success)
+                'updated'  // grep for verification (found)
+            );
+
+        // Mock the restartLiteSpeed method to return a successful message
+        $this->managerMock->method('restartLiteSpeed')->willReturn('[OK] Send SIGUSR1 to 80579');
+
+        // Inject the mock SSH connection
+        $this->managerMock->setSshConnection($this->sshMock);
+
+        // Call the method
+        $result = $this->managerMock->updateVhostConfsPy();
+
+        // Assert that the method returns true on success
+        $this->assertTrue($result);
+    }
+
+    public function testUpdateVhostConfsPyNoChangeNeeded()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Simulate the grep command finding the replacement pattern already present
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturn('exists');  // grep for replacement pattern (found)
+
+        // Inject the mock SSH connection
+        $this->managerMock->setSshConnection($this->sshMock);
+
+        // Call the method
+        $result = $this->managerMock->updateVhostConfsPy();
+
+        // Assert that the method returns true since no changes are needed
+        $this->assertTrue($result);
+    }
+
+    public function testUpdateVhostConfsPyOriginalPatternNotFound()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Simulate the grep commands not finding the patterns
+        $this->sshMock->expects($this->exactly(2))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // grep for replacement pattern (not found)
+                ''   // grep for original pattern (not found)
+            );
+
+        // Inject the mock SSH connection
+        $this->managerMock->setSshConnection($this->sshMock);
+
+        // Call the method
+        $result = $this->managerMock->updateVhostConfsPy();
+
+        // Assert that the method returns false since the original pattern was not found
+        $this->assertFalse($result);
+    }
+
+    public function testUpdateVhostConfsPyReplacementFailed()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Simulate the sequence of exec calls with a failed sed command
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',        // grep for replacement pattern (not found)
+                'exists',  // grep for original pattern (found)
+                '',        // cp command for backup (success)
+                false      // sed command for replacement (failure)
+            );
+
+        // Inject the mock SSH connection
+        $this->managerMock->setSshConnection($this->sshMock);
+
+        // Call the method
+        $result = $this->managerMock->updateVhostConfsPy();
+
+        // Assert that the method returns false on sed command failure
+        $this->assertFalse($result);
+    }
+
+    public function testUpdateVhostConfsPyVerificationFailed()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Simulate the sequence of exec calls with a failed verification
+        $this->sshMock->expects($this->exactly(5))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',        // grep for replacement pattern (not found)
+                'exists',  // grep for original pattern (found)
+                '',        // cp command for backup (success)
+                '',        // sed command for replacement (success)
+                ''         // grep for verification (not found)
+            );
+
+        // Inject the mock SSH connection
+        $this->managerMock->setSshConnection($this->sshMock);
+
+        // Call the method
+        $result = $this->managerMock->updateVhostConfsPy();
+
+        // Assert that the method returns false on verification failure
+        $this->assertFalse($result);
+    }
+
+    public function testUpdateVhostConfsPyWithoutRestartingLiteSpeed()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Simulate the sequence of exec calls
+        $this->sshMock->expects($this->exactly(5))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',        // grep for replacement pattern (not found)
+                'exists',  // grep for original pattern (found)
+                '',        // cp command for backup (success)
+                '',        // sed command for replacement (success)
+                'updated'  // grep for verification (found)
+            );
+
+        // Mock the restartLiteSpeed method and expect it not to be called
+        $this->managerMock->expects($this->never())->method('restartLiteSpeed');
+
+        // Inject the mock SSH connection
+        $this->managerMock->setSshConnection($this->sshMock);
+
+        // Call the method with restartLiteSpeed set to false
+        $result = $this->managerMock->updateVhostConfsPy(false);
+
+        // Assert that the method returns true on success
+        $this->assertTrue($result);
+    }
+
+    public function testUpdateVhostConfsPySshConnectionFailure()
     {
         // Configure the SSH mock to fail login
         $this->sshMock->method('login')->willReturn(false);
 
-        // Call the method
-        $result = $this->manager->updateVhostPy();
+        // Expect an exception to be thrown
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Login failed.');
 
-        // Assert that the method returns false due to SSH connection failure
-        $this->assertFalse($result);
+        // Call the method
+        $this->manager->updateVhostConfsPy();
     }
 }
