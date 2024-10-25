@@ -835,10 +835,9 @@ EOF',
         $this->verifyConnectionSsh();
 
         // Command to update the symbolic link restrictions for the domain
-        // Use escapeshellcmd() instead of escapeshellarg() to avoid issue with quotes
         $command = sprintf(
             "sed -i '/^virtualHost %s {/,/^}/ s/restrained[[:space:]]*[0-9]/restrained              0/' /usr/local/lsws/conf/httpd_config.conf",
-            escapeshellcmd($domainName)
+            escape_single_quotes_for_sed($domainName)
         );
 
         // Execute the command on the server
@@ -1213,7 +1212,7 @@ EOF',
         $this->sshConnection->exec('cp /root/.my.cnf /root/.my.cnf.orig');
 
         // Update the password in /root/.my.cnf using sed
-        $escapedPassword = escapeshellcmd($dbPassword);
+        $escapedPassword = escape_single_quotes_for_sed($dbPassword);
         $updateCommand   = "sed -i 's/password=\".*\"/password=\"$escapedPassword\"/' /root/.my.cnf";
         $output          = $this->sshConnection->exec($updateCommand);
 

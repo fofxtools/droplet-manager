@@ -203,6 +203,98 @@ class FunctionsTest extends TestCase
         DropletManager\escapeshellarg_linux("Hello\0World");
     }
 
+    /**
+     * Data provider for Unix-like escapeshellcmd_os tests
+     */
+    public static function escapeshellcmdOsUnixProvider(): array
+    {
+        return [
+            'Empty string'           => ['', ''],
+            'Simple command'         => ['ls -la', 'ls -la'],
+            'Command with &'         => ['echo Hello & World', 'echo Hello \\& World'],
+            'Single quotes'          => ['echo \'Hello World\'', 'echo \'Hello World\''],
+            'Unmatched single quote' => ['echo \'Unmatched quote', 'echo \\\'Unmatched quote'],
+            'Double quotes'          => ['echo "Hello World"', 'echo "Hello World"'],
+            'Unmatched double quote' => ['echo "Unmatched quote', 'echo \\"Unmatched quote'],
+            'Backticks'              => ['ls `uname -a`', 'ls \\`uname -a\\`'],
+            'Dollar sign'            => ['echo $HOME', 'echo \\$HOME'],
+            'Backslash'              => ['echo \\$', 'echo \\\\\\$'],
+            'Semicolon'              => ['echo Dangerous; rm -rf /', 'echo Dangerous\\; rm -rf /'],
+            'Newline'                => ["echo Hello\nWorld", "echo Hello\\\nWorld"],
+            'Multiple special chars' => ['echo \'Single\' "Double"', 'echo \'Single\' "Double"'],
+            'Multiple commands'      => ['echo \'Single\' & echo "Double"', 'echo \'Single\' \\& echo "Double"'],
+            'Special characters'     => ['echo !@#$%^&*()[]{}', 'echo !@\\#\\$%\\^\\&\\*\\(\\)\\[\\]\\{\\}'],
+            'Non-ASCII characters'   => ["echo \xFF", 'echo '],
+        ];
+    }
+
+    /**
+     * Data provider for Windows escapeshellcmd_os tests
+     */
+    public static function escapeshellcmdOsWindowsProvider(): array
+    {
+        return [
+            'Empty string'           => ['', ''],
+            'Simple command'         => ['ls -la', 'ls -la'],
+            'Command with &'         => ['echo Hello & World', 'echo Hello ^& World'],
+            'Single quotes'          => ['echo \'Hello World\'', 'echo ^\'Hello World^\''],
+            'Unmatched single quote' => ['echo \'Unmatched quote', 'echo ^\'Unmatched quote'],
+            'Double quotes'          => ['echo "Hello World"', 'echo ^"Hello World^"'],
+            'Unmatched double quote' => ['echo "Unmatched quote', 'echo ^"Unmatched quote'],
+            'Backticks'              => ['ls `uname -a`', 'ls ^`uname -a^`'],
+            'Dollar sign'            => ['echo $HOME', 'echo ^$HOME'],
+            'Backslash'              => ['echo \\$', 'echo ^\\^$'],
+            'Semicolon'              => ['echo Dangerous; rm -rf /', 'echo Dangerous^; rm -rf /'],
+            'Newline'                => ["echo Hello\nWorld", "echo Hello^\nWorld"],
+            'Multiple special chars' => ['echo \'Single\' "Double"', 'echo ^\'Single^\' ^"Double^"'],
+            'Multiple commands'      => ['echo \'Single\' & echo "Double"', 'echo ^\'Single^\' ^& echo ^"Double^"'],
+            'Special characters'     => ['echo !@#$%^&*()[]{}', 'echo ^!@^#^$^%^^^&^*^(^)^[^]^{^}'],
+            'Non-ASCII characters'   => ["echo \xFF", "echo ^\xFF"],
+        ];
+    }
+
+    #[DataProvider('escapeshellcmdOsUnixProvider')]
+    public function testEscapeshellcmdOsUnix(string $input, string $expected): void
+    {
+        $this->assertSame($expected, DropletManager\escapeshellcmd_os($input, false));
+    }
+
+    #[DataProvider('escapeshellcmdOsWindowsProvider')]
+    public function testEscapeshellcmdOsWindows(string $input, string $expected): void
+    {
+        $this->assertSame($expected, DropletManager\escapeshellcmd_os($input, true));
+    }
+
+    public function testEscapeshellcmdOsAutodetectOS(): void
+    {
+        $input  = 'echo Hello & World';
+        $result = DropletManager\escapeshellcmd_os($input);
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            $this->assertSame('echo Hello ^& World', $result);
+        } else {
+            $this->assertSame('echo Hello \\& World', $result);
+        }
+    }
+
+    public function testEscapeshellcmdOsWithNullByte(): void
+    {
+        $this->expectException(\ValueError::class);
+        DropletManager\escapeshellcmd_os("Hello\0World");
+    }
+
+    #[DataProvider('escapeshellcmdOsUnixProvider')]
+    public function testEscapeshellcmdLinux(string $input, string $expected): void
+    {
+        $this->assertSame($expected, DropletManager\escapeshellcmd_linux($input));
+    }
+
+    #[DataProvider('escapeshellcmdOsWindowsProvider')]
+    public function testEscapeshellcmdWindows(string $input, string $expected): void
+    {
+        $this->assertSame($expected, DropletManager\escapeshellcmd_windows($input));
+    }
+
     public static function escapeSingleQuotesForSedProvider()
     {
         return [
