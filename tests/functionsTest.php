@@ -204,9 +204,9 @@ class FunctionsTest extends TestCase
     }
 
     /**
-     * Data provider for Unix-like escapeshellcmd_os tests
+     * Data provider for Linux escapeshellcmd_os tests
      */
-    public static function escapeshellcmdOsUnixProvider(): array
+    public static function escapeshellcmdOsLinuxProvider(): array
     {
         return [
             'Empty string'           => ['', ''],
@@ -253,8 +253,8 @@ class FunctionsTest extends TestCase
         ];
     }
 
-    #[DataProvider('escapeshellcmdOsUnixProvider')]
-    public function testEscapeshellcmdOsUnix(string $input, string $expected): void
+    #[DataProvider('escapeshellcmdOsLinuxProvider')]
+    public function testEscapeshellcmdOsLinux(string $input, string $expected): void
     {
         $this->assertSame($expected, DropletManager\escapeshellcmd_os($input, false));
     }
@@ -283,7 +283,7 @@ class FunctionsTest extends TestCase
         DropletManager\escapeshellcmd_os("Hello\0World");
     }
 
-    #[DataProvider('escapeshellcmdOsUnixProvider')]
+    #[DataProvider('escapeshellcmdOsLinuxProvider')]
     public function testEscapeshellcmdLinux(string $input, string $expected): void
     {
         $this->assertSame($expected, DropletManager\escapeshellcmd_linux($input));
@@ -293,6 +293,68 @@ class FunctionsTest extends TestCase
     public function testEscapeshellcmdWindows(string $input, string $expected): void
     {
         $this->assertSame($expected, DropletManager\escapeshellcmd_windows($input));
+    }
+
+    public static function linuxEscapeshellargProvider()
+    {
+        return [
+            'simple string'                  => ['hello world', "'hello world'"],
+            'empty string'                   => ['', "''"],
+            'string with spaces'             => ['hello world', "'hello world'"],
+            'string with single quotes'      => ["hello 'world'", "'hello '\\''world'\\'''"],
+            'string with double quotes'      => ['hello "world"', "'hello \"world\"'"],
+            'string with backticks'          => ['echo `uname -a`', "'echo `uname -a`'"],
+            'string with dollar sign'        => ['$HOME', "'\$HOME'"],
+            'string with backslash'          => ['C:\\Windows\\System32', "'C:\\Windows\\System32'"],
+            'string with newline'            => ["hello\nworld", "'hello\nworld'"],
+            'string with tab'                => ["hello\tworld", "'hello\tworld'"],
+            'string with special characters' => ['!@#$%^&*()_+', "'!@#$%^&*()_+'"],
+            'string with Unicode characters' => ['héllo wörld', "'héllo wörld'"],
+            'string with control characters' => ["hello\x01world", "'hello\x01world'"],
+            'potentially dangerous command'  => ['rm -rf /', "'rm -rf /'"],
+            'command with redirection'       => ['echo hello > file.txt', "'echo hello > file.txt'"],
+            'command with pipe'              => ['ls | grep php', "'ls | grep php'"],
+            'string with percent signs'      => ['%PATH%', "'%PATH%'"],
+            'string with caret'              => ['echo ^hello', "'echo ^hello'"],
+            'multiple commands'              => ["echo 'Single' & echo \"Double\"", "'echo '\\''Single'\\'' & echo \"Double\"'"],
+        ];
+    }
+
+    public static function windowsEscapeshellargProvider()
+    {
+        return [
+            'simple string'                  => ['hello world', '"hello world"'],
+            'empty string'                   => ['', '""'],
+            'string with spaces'             => ['hello world', '"hello world"'],
+            'string with single quotes'      => ["hello 'world'", '"hello \'world\'"'],
+            'string with double quotes'      => ['hello "world"', '"hello  world "'],
+            'string with backticks'          => ['echo `uname -a`', '"echo `uname -a`"'],
+            'string with dollar sign'        => ['$HOME', '"$HOME"'],
+            'string with backslash'          => ['C:\\Windows\\System32', '"C:\\Windows\\System32"'],
+            'string with newline'            => ["hello\nworld", "\"hello\nworld\""],
+            'string with tab'                => ["hello\tworld", "\"hello\tworld\""],
+            'string with special characters' => ['!@#$%^&*()_+', '" @#$ ^&*()_+"'],
+            'string with Unicode characters' => ['héllo wörld', '"héllo wörld"'],
+            'string with control characters' => ["hello\x01world", "\"hello\x01world\""],
+            'potentially dangerous command'  => ['rm -rf /', '"rm -rf /"'],
+            'command with redirection'       => ['echo hello > file.txt', '"echo hello > file.txt"'],
+            'command with pipe'              => ['ls | grep php', '"ls | grep php"'],
+            'string with percent signs'      => ['%PATH%', '" PATH "'],
+            'string with carets'             => ['echo ^hello', '"echo ^hello"'],
+            'multiple commands'              => ["echo 'Single' & echo \"Double\"", '"echo \'Single\' & echo  Double "'],
+        ];
+    }
+
+    #[DataProvider('linuxEscapeshellargProvider')]
+    public function testEscapeshellargOsLinux($input, $expected)
+    {
+        $this->assertEquals($expected, DropletManager\escapeshellarg_os($input, false));
+    }
+
+    #[DataProvider('windowsEscapeshellargProvider')]
+    public function testEscapeshellargOsWindows($input, $expected)
+    {
+        $this->assertEquals($expected, DropletManager\escapeshellarg_os($input, true));
     }
 
     public static function escapeSingleQuotesForSedProvider()
