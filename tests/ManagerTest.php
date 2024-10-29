@@ -2,7 +2,6 @@
 
 namespace FOfX\DropletManager\Tests;
 
-use FOfX\DropletManager;
 use FOfX\DropletManager\Manager;
 use PHPUnit\Framework\TestCase;
 use phpseclib3\Net\SSH2;
@@ -19,6 +18,7 @@ use DigitalOceanV2\Api\DomainRecord;
 use GuzzleHttp\Client;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamInterface;
+use FOfX\Helper;
 
 /**
  * Unit tests for the Manager class.
@@ -1270,9 +1270,9 @@ class ManagerTest extends TestCase
         $this->sshMock->expects($this->once())
             ->method('exec')
             ->with($this->logicalAnd(
-                $this->stringContains(DropletManager\escapeshellarg_linux(\FOfX\DropletManager\sanitize_domain_for_database($domainName, $username))),
-                $this->stringContains(DropletManager\escapeshellarg_linux($username)),
-                $this->stringContains(DropletManager\escapeshellarg_linux($password))
+                $this->stringContains(Helper\escapeshellarg_linux(\FOfX\Helper\sanitize_domain_for_database($domainName, $username))),
+                $this->stringContains(Helper\escapeshellarg_linux($username)),
+                $this->stringContains(Helper\escapeshellarg_linux($password))
             ))
             ->willReturn('');
 
@@ -1405,25 +1405,90 @@ class ManagerTest extends TestCase
         // Mock the SSH connection login to return true for successful connection
         $this->sshMock->method('login')->willReturn(true);
 
-        // Mock the exec method to simulate successful execution of the sed command
-        $this->sshMock->method('exec')->willReturn('');  // Simulate success by returning an empty string
+        // Get the existing block and create replacement
+        $existingBlock = 'virtualHost example.com {
+        restrained 1
+        other settings
+    }';
+
+        // Mock the exec method to simulate the sequence of commands
+        $this->sshMock->expects($this->exactly(5))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // First grep check (symlinks not already enabled)
+                'exists',  // Second grep check (original block exists)
+                $existingBlock,  // Get existing block
+                '',  // cp command for backup
+                'updated'  // Final grep verification
+            );
 
         // Call the method and assert that it returns true on success
         $result = $this->manager->enableSymlinksForDomain($domainName);
         $this->assertTrue($result);
     }
 
-    public function testEnableSymlinksForDomainCommandFailure(): void
+    public function testEnableSymlinksForDomainAlreadyEnabled(): void
     {
         $domainName = 'example.com';
 
         // Mock the SSH login to return true for successful connection
         $this->sshMock->method('login')->willReturn(true);
 
-        // Mock the exec method to return false, simulating a command failure
-        $this->sshMock->method('exec')->willReturn(false);
+        // Mock the exec method to return 'exists' for the first check, indicating symlinks are already enabled
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturn('exists');
 
-        // Call the method and assert that it returns false on command failure
+        // Call the method and assert that it returns true when symlinks are already enabled
+        $result = $this->manager->enableSymlinksForDomain($domainName);
+        $this->assertTrue($result);
+    }
+
+    public function testEnableSymlinksForDomainOriginalBlockNotFound(): void
+    {
+        $domainName = 'example.com';
+
+        // Mock the SSH login to return true for successful connection
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Mock the exec method to simulate the sequence of commands
+        $this->sshMock->expects($this->exactly(2))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // First grep check (symlinks not already enabled)
+                ''   // Second grep check (original block not found)
+            );
+
+        // Call the method and assert that it returns false when original block is not found
+        $result = $this->manager->enableSymlinksForDomain($domainName);
+        $this->assertFalse($result);
+    }
+
+    public function testEnableSymlinksForDomainVerificationFails(): void
+    {
+        $domainName = 'example.com';
+
+        // Mock the SSH login to return true for successful connection
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Get the existing block
+        $existingBlock = 'virtualHost example.com {
+        restrained 1
+        other settings
+    }';
+
+        // Mock the exec method to simulate the sequence of commands
+        $this->sshMock->expects($this->exactly(5))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // First grep check (symlinks not already enabled)
+                'exists',  // Second grep check (original block exists)
+                $existingBlock,  // Get existing block
+                '',  // cp command for backup
+                ''   // Final grep verification fails
+            );
+
+        // Call the method and assert that it returns false when verification fails
         $result = $this->manager->enableSymlinksForDomain($domainName);
         $this->assertFalse($result);
     }
@@ -2096,89 +2161,114 @@ class ManagerTest extends TestCase
 
     public function testUpdateMyCnfPasswordSuccess()
     {
-        // Configure the SSH mock
+        // Mock SSH connection
         $this->sshMock->method('login')->willReturn(true);
-        $this->sshMock->expects($this->exactly(4))
+        $this->sshMock->expects($this->exactly(5))
             ->method('exec')
             ->willReturnOnConsecutiveCalls(
-                'password123', // Extract password from /root/.db_password
-                'oldpassword', // Extract current password from /root/.my.cnf
-                '',            // Backup .my.cnf file
-                ''             // Update .my.cnf file
+                'testpass123',                    // Get password from .db_password
+                'oldpass',                        // Get current password from .my.cnf
+                '',                               // Backup command output (success)
+                '',                               // Update command output (success)
+                'testpass123'                     // Verification check passes
             );
 
+        // Call the method
         $result = $this->manager->updateMyCnfPassword();
+
+        // Assert
         $this->assertTrue($result);
     }
 
-    public function testUpdateMyCnfPasswordNoChangeNeeded()
+    public function testUpdateMyCnfPasswordNoUpdateNeeded()
     {
-        // Configure the SSH mock
+        // Mock SSH connection
         $this->sshMock->method('login')->willReturn(true);
         $this->sshMock->expects($this->exactly(2))
             ->method('exec')
             ->willReturnOnConsecutiveCalls(
-                'password123', // Extract password from /root/.db_password
-                'password123'  // Extract current password from /root/.my.cnf (same as .db_password)
+                'samepass123',                    // Get password from .db_password
+                'samepass123'                     // Get current password from .my.cnf (matches)
             );
 
+        // Call the method
         $result = $this->manager->updateMyCnfPassword();
+
+        // Assert that no update was needed and method returns true
         $this->assertTrue($result);
     }
 
-    public function testUpdateMyCnfPasswordFailToExtractDbPassword()
+    public function testUpdateMyCnfPasswordFailsToGetDbPassword()
     {
-        // Configure the SSH mock
+        // Mock SSH connection
         $this->sshMock->method('login')->willReturn(true);
         $this->sshMock->expects($this->once())
             ->method('exec')
-            ->willReturn(''); // Fail to extract password from /root/.db_password
+            ->willReturn('');  // Empty response when trying to get password from .db_password
 
+        // Call the method
         $result = $this->manager->updateMyCnfPassword();
+
+        // Assert
         $this->assertFalse($result);
     }
 
-    public function testUpdateMyCnfPasswordFailToExtractMyCnfPassword()
+    public function testUpdateMyCnfPasswordFailsToGetCurrentPassword()
     {
-        // Configure the SSH mock
+        // Mock SSH connection
         $this->sshMock->method('login')->willReturn(true);
         $this->sshMock->expects($this->exactly(2))
             ->method('exec')
             ->willReturnOnConsecutiveCalls(
-                'password123', // Extract password from /root/.db_password
-                ''             // Fail to extract current password from /root/.my.cnf
+                'testpass123',                    // Get password from .db_password
+                ''                                // Empty response when trying to get current password
             );
 
+        // Call the method
         $result = $this->manager->updateMyCnfPassword();
+
+        // Assert
         $this->assertFalse($result);
     }
 
-    public function testUpdateMyCnfPasswordFailToUpdate()
+    public function testUpdateMyCnfPasswordUpdateFails()
     {
-        // Configure the SSH mock
+        // Mock SSH connection
         $this->sshMock->method('login')->willReturn(true);
         $this->sshMock->expects($this->exactly(4))
             ->method('exec')
             ->willReturnOnConsecutiveCalls(
-                'password123',   // Extract password from /root/.db_password
-                'oldpassword',   // Extract current password from /root/.my.cnf
-                '',              // Backup .my.cnf file
-                'Update failed'  // Fail to update .my.cnf file
+                'testpass123',                    // Get password from .db_password
+                'oldpass',                        // Get current password from .my.cnf
+                '',                               // Backup command output (success)
+                'Permission denied'               // Update command fails
             );
 
+        // Call the method
         $result = $this->manager->updateMyCnfPassword();
+
+        // Assert that the update failed
         $this->assertFalse($result);
     }
 
-    public function testUpdateMyCnfPasswordSshConnectionFailure()
+    public function testUpdateMyCnfPasswordVerificationFails()
     {
-        // Configure the SSH mock to fail login
-        $this->sshMock->method('login')->willReturn(false);
+        // Mock SSH connection
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'testpass123',                    // Get password from .db_password
+                'oldpass',                        // Get current password from .my.cnf
+                '',                               // Update command output (success)
+                'wrongpass'                       // Verification check fails
+            );
 
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Login failed.');
+        // Call the method
+        $result = $this->manager->updateMyCnfPassword();
 
-        $this->manager->updateMyCnfPassword();
+        // Assert
+        $this->assertFalse($result);
     }
 
     public function testUpdateNanoCtrlFSearchBindingAlreadySet()

@@ -2,8 +2,8 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use FOfX\DropletManager;
 use FOfX\DropletManager\Manager;
+use FOfX\Helper;
 
 $manager   = new Manager('test');
 $cyberLink = $manager->connectCyberLink();
@@ -32,7 +32,7 @@ $domain = '022679.xyz';
 
 //$manager->createHtaccessForHttpsRedirect($domain);
 
-//echo DropletManager\sanitize_domain_for_database($domain, 'user123', true, false, 'db_');
+//echo Helper\sanitize_domain_for_database($domain, 'user123', true, false, 'db_');
 //$manager->createDatabase($domain, 'user123', 'password123');
 //$manager->dropDatabase($domain, 'user123');
 //$manager->grantRemoteDatabaseAccess($domain, 'user123', 'password123');
@@ -41,7 +41,7 @@ $domain = '022679.xyz';
 
 //$manager->setUserPasswordSsh($domain, 'TCdPvFAR4Q');
 
-//$manager->enableSymlinksForDomain($domain);
+var_dump($manager->enableSymlinksForDomain($domain));
 
 //var_dump($manager->restartLiteSpeed());
 
@@ -51,7 +51,7 @@ $domain = '022679.xyz';
 
 //print_r($cyberLink->listUsers());
 
-//var_dump($manager->updateMyCnfPassword());
+var_dump($manager->updateMyCnfPassword());
 //var_dump($manager->enableCyberPanelApiAccess());
 
 //var_dump($manager->updateVhostPy());

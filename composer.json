@@ -7,9 +7,7 @@
         "psr-4": {
             "FOfX\\DropletManager\\": "src/"
         },
-        "files": [
-            "src/functions.php"
-        ]
+        "files": []
     },
     "autoload-dev": {
         "psr-4": {
@@ -29,7 +27,8 @@
         "phpseclib/phpseclib": "^3.0",
         "monolog/monolog": "^3.7",
         "league/flysystem": "^3.29",
-        "league/flysystem-sftp-v3": "^3.29"
+        "league/flysystem-sftp-v3": "^3.29",
+        "fofx/helper": "^1.1"
     },
     "config": {
         "allow-plugins": {
