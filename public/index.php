@@ -60,4 +60,6 @@ $domain = '022679.xyz';
 //var_dump($manager->deleteWebsite($domain, true));
 //$manager->setupWebsite($domain, true);
 
-$manager->setupAliasesAndFunctions();
+//$manager->setupAliasesAndFunctions();
+
+var_dump($manager->configureScreen());

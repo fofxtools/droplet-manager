@@ -2819,4 +2819,111 @@ class ManagerTest extends TestCase
 
         $this->manager->setupAliasesAndFunctions();
     }
+
+    /**
+     * Test configureScreen() when all settings are already configured correctly
+     */
+    public function testConfigureScreenAllSettingsAlreadyConfigured(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',                         // Backup command success
+                'exists',      // First setting already exists
+                'exists', // Second setting already exists
+                'exists'          // Third setting already exists
+            );
+
+        $result = $this->manager->configureScreen();
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test configureScreen() when all settings need to be uncommented
+     */
+    public function testConfigureScreenUncommentAllSettings(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(13))  // 1 backup + (3 settings × 4 checks each)
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',                         // Backup command success
+                '',                         // First setting doesn't exist (grep for uncommented)
+                'exists',                   // First setting is commented (grep for commented)
+                '',                         // Uncomment successful (sed command)
+                'exists',                   // Verification check successful
+                '',                         // Second setting doesn't exist (grep for uncommented)
+                'exists',                   // Second setting is commented (grep for commented)
+                '',                         // Uncomment successful (sed command)
+                'exists',                   // Verification check successful
+                '',                         // Third setting doesn't exist (grep for uncommented)
+                'exists',                   // Third setting is commented (grep for commented)
+                '',                         // Uncomment successful (sed command)
+                'exists'                    // Verification check successful
+            );
+
+        $result = $this->manager->configureScreen();
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test configureScreen() when all settings need to be added
+     */
+    public function testConfigureScreenAddAllSettings(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(13))  // 1 backup + (3 settings × 4 checks each)
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',                         // Backup command success
+                '',                         // First setting doesn't exist (grep for uncommented)
+                '',                         // First setting not commented (grep for commented)
+                '',                         // Append new line (echo command)
+                'exists',                   // Verification check successful
+                '',                         // Second setting doesn't exist (grep for uncommented)
+                '',                         // Second setting not commented (grep for commented)
+                '',                         // Append new line (echo command)
+                'exists',                   // Verification check successful
+                '',                         // Third setting doesn't exist (grep for uncommented)
+                '',                         // Third setting not commented (grep for commented)
+                '',                         // Append new line (echo command)
+                'exists'                    // Verification check successful
+            );
+
+        $result = $this->manager->configureScreen();
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test configureScreen() when verification fails after update
+     */
+    public function testConfigureScreenVerificationFails(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(13))  // 1 backup + (3 settings × 4 checks each)
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',                         // Backup command success
+                '',                         // First setting doesn't exist (grep for uncommented)
+                '',                         // First setting not commented (grep for commented)
+                '',                         // Append new line (echo command)
+                '',                         // Verification fails (should return 'exists' for success)
+                '',                         // Second setting doesn't exist (grep for uncommented)
+                '',                         // Second setting not commented (grep for commented)
+                '',                         // Append new line (echo command)
+                '',                         // Verification fails (should return 'exists' for success)
+                '',                         // Third setting doesn't exist (grep for uncommented)
+                '',                         // Third setting not commented (grep for commented)
+                '',                         // Append new line (echo command)
+                ''                          // Verification fails (should return 'exists' for success)
+            );
+
+        $result = $this->manager->configureScreen();
+        $this->assertFalse($result);
+    }
 }

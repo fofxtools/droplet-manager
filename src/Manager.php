@@ -1614,4 +1614,68 @@ EOF',
 
         $this->logger->info('Shell aliases and functions setup process completed.');
     }
+
+    /**
+     * Configures the screen utility by updating /etc/screenrc with specific settings.
+     *
+     * This method configures three settings in the screenrc file:
+     * 1. Disables the startup message
+     * 2. Enables mouse scrolling in xterm
+     * 3. Sets the default shell to bash
+     *
+     * @return bool Returns true if all configurations were successful, false otherwise.
+     */
+    public function configureScreen(): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        $filePath   = '/etc/screenrc';
+        $backupPath = $filePath . '.bak_' . date('Ymd_His');
+        $success    = true;
+
+        // Backup the original file
+        $this->logger->info("Backing up $filePath to $backupPath");
+        $this->sshConnection->exec("cp $filePath $backupPath");
+
+        // Define the configurations to be added/updated
+        $configurations = [
+            'startup_message off',
+            'termcapinfo xterm|xterms|xs|rxvt ti@:te@',
+            'shell -/bin/bash',
+        ];
+
+        foreach ($configurations as $pattern) {
+            // Check if the exact line already exists
+            $grepPattern = "grep -q '^{$pattern}$' {$filePath} && echo 'exists'";
+            $grepCheck   = Helper\trim_if_string($this->sshConnection->exec($grepPattern));
+            if ($grepCheck !== 'exists') {
+                // Check if the commented version exists
+                $grepCommentedPattern = "grep -q '^#{$pattern}$' {$filePath} && echo 'exists'";
+                if (Helper\trim_if_string($this->sshConnection->exec($grepCommentedPattern)) === 'exists') {
+                    // Replace the commented version with uncommented
+                    $sedCommand = "sed -i 's/^#{$pattern}$/{$pattern}/' {$filePath}";
+                    $this->logger->info("Replacing commented version of {$pattern} with uncommented");
+                    $this->sshConnection->exec($sedCommand);
+                } else {
+                    // Append new line
+                    $this->logger->info("Appending new line: {$pattern}");
+                    $this->sshConnection->exec("echo '{$pattern}' >> {$filePath}");
+                }
+
+                // Verify the change
+                $verificationCheck = Helper\trim_if_string($this->sshConnection->exec($grepPattern));
+                if ($verificationCheck !== 'exists') {
+                    $this->logger->error("Failed to configure {$pattern} in screenrc");
+                    $success = false;
+                } else {
+                    $this->logger->info("Successfully configured {$pattern} in screenrc");
+                }
+            } else {
+                $this->logger->info("{$pattern} already configured in screenrc");
+            }
+        }
+
+        return $success;
+    }
 }
