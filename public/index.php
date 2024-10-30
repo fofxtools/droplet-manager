@@ -41,7 +41,7 @@ $domain = '022679.xyz';
 
 //$manager->setUserPasswordSsh($domain, 'TCdPvFAR4Q');
 
-var_dump($manager->enableSymlinksForDomain($domain));
+//var_dump($manager->enableSymlinksForDomain($domain));
 
 //var_dump($manager->restartLiteSpeed());
 
@@ -51,7 +51,7 @@ var_dump($manager->enableSymlinksForDomain($domain));
 
 //print_r($cyberLink->listUsers());
 
-var_dump($manager->updateMyCnfPassword());
+//var_dump($manager->updateMyCnfPassword());
 //var_dump($manager->enableCyberPanelApiAccess());
 
 //var_dump($manager->updateVhostPy());
@@ -59,3 +59,5 @@ var_dump($manager->updateMyCnfPassword());
 
 //var_dump($manager->deleteWebsite($domain, true));
 //$manager->setupWebsite($domain, true);
+
+$manager->setupAliasesAndFunctions();

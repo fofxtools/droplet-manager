@@ -1551,4 +1551,67 @@ EOF',
             return false;
         }
     }
+
+    /**
+     * Sets up aliases and functions via SSH, if not already present.
+     *
+     * @return void
+     */
+    public function setupAliasesAndFunctions(): void
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        $entries = [
+            // Find directories, sorted alphabetically ignoring case, remove leading ./
+            'alias dfind="find -maxdepth 1 -type d | sort -f | sed \'\\\'\'s/.\///g\'\\\'\'"' => '/etc/profile.d/z-alias-dfind.sh',
+            // Disk usage, in MB, max depth 1
+            'alias du1="du -B MB --max-depth=1"' => '/etc/profile.d/z-alias-du1.sh',
+            // Find files, sorted alphabetically ignoring case, remove leading ./
+            'alias ffind="find -maxdepth 1 -type f | sort -f | sed \'\\\'\'s/.\///g\'\\\'\'"' => '/etc/profile.d/z-alias-ffind.sh',
+            // List files (including hidden) with details, human readable file size, colorized
+            'alias ll="ls -alhF --color=auto"' => '/etc/profile.d/z-alias-ll.sh',
+            // List files, colorized
+            'alias ls="ls --color=auto"' => '/etc/profile.d/z-alias-ls.sh',
+            // Ask for confirmation before removing files
+            'alias rm="rm -i"' => '/etc/profile.d/z-alias-rm.sh',
+            // Switch to user with full login
+            'alias su="su -"' => '/etc/profile.d/z-alias-su.sh',
+            // Column output, table format, tab separator, less output
+            'colu() { column -t -s$\'\\t\' $1 | less -S; }' => '/etc/profile.d/z-function-colu.sh',
+            // Disk usage, in MB, max depth set by first argument, default is 1
+            'dun() { du -B MB --max-depth="${1:-1}"; }' => '/etc/profile.d/z-function-dun.sh',
+            // In-line grep, recursive to subdirectories, case insensitive, whole word, ignore case
+            // Recursively searches for a case-insensitive, whole-word match of the provided pattern(s) in the current directory, showing line numbers
+            'ingrep() { grep -rnwi . -e "$*"; }' => '/etc/profile.d/z-function-ingrep.sh',
+            // Search for directories by name from root, print the directory path,
+            // and list its contents with detailed, human-readable output.
+            'lsfind() { find / -name "$1" -type d -exec sh -c \'\\\'\'echo "\nDirectory: {}"; ls -alh "{}"\'\\\'\' \; ; }' => '/etc/profile.d/z-function-lsfind.sh',
+            // PHP, filename, name, php, pipe output to tee with _tee.out suffix
+            'phptee() { filename="$1"; name="${filename%.*}"; php $name.php |& tee ${name}_tee.out; }' => '/etc/profile.d/z-function-phptee.sh',
+        ];
+
+        foreach ($entries as $entry => $filePath) {
+            // Check if the file already exists
+            $fileExists = $this->sshConnection->exec("[ -f $filePath ] && echo 'exists'");
+
+            if (Helper\trim_if_string($fileExists) === 'exists') {
+                $this->logger->info("File $filePath already exists. Skipping.");
+
+                continue;
+            }
+
+            // Create the alias/function file
+            $command = "echo '$entry' > $filePath && echo 'created'";
+            $result  = $this->sshConnection->exec($command);
+
+            if (Helper\trim_if_string($result) === 'created') {
+                $this->logger->info("Successfully created $filePath.");
+            } else {
+                $this->logger->error("Failed to create $filePath. Command: $command SSH output: $result");
+            }
+        }
+
+        $this->logger->info('Shell aliases and functions setup process completed.');
+    }
 }

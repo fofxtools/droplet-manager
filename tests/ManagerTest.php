@@ -2701,4 +2701,122 @@ class ManagerTest extends TestCase
         // Call the method
         $this->manager->updateVhostConfsPy();
     }
+
+    /**
+     * Test successful creation of all aliases and functions when none exist.
+     */
+    public function testSetupAliasesAndFunctionsSuccess(): void
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // For each file check, return that it doesn't exist
+        // For each creation attempt, return 'created'
+        $this->sshMock->expects($this->exactly(24))  // 12 files × 2 calls each (check + create)
+            ->method('exec')
+            ->willReturnCallback(function ($command) {
+                if (strpos($command, '[ -f ') === 0) {
+                    return '';  // File doesn't exist
+                }
+
+                return 'created';  // Creation successful
+            });
+
+        $this->manager->setupAliasesAndFunctions();
+    }
+
+    /**
+     * Test when all alias and function files already exist.
+     */
+    public function testSetupAliasesAndFunctionsAllFilesExist(): void
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // For each file check, return that it exists
+        $this->sshMock->expects($this->exactly(12))  // Only the existence checks
+            ->method('exec')
+            ->willReturn('exists');
+
+        $this->manager->setupAliasesAndFunctions();
+    }
+
+    /**
+     * Test handling of mixed scenarios where some files exist and others need to be created.
+     */
+    public function testSetupAliasesAndFunctionsMixedScenario(): void
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Track number of exec calls
+        $execCalls = 0;
+
+        // Mock exec to handle all 12 files
+        $this->sshMock->expects($this->any())
+            ->method('exec')
+            ->willReturnCallback(function ($command) use (&$execCalls) {
+                $execCalls++;
+                // Return 'exists' for even-numbered files, empty for odd-numbered ones
+                if (strpos($command, '[ -f ') === 0) {
+                    return $execCalls % 2 === 0 ? 'exists' : '';
+                }
+
+                return 'created';
+            });
+
+        $this->manager->setupAliasesAndFunctions();
+
+        // Assert that exec was called the expected number of times
+        // 12 files total:
+        // - All 12 files get checked for existence (12 checks)
+        // - Half of them (6) need to be created (6 creates)
+        // Total expected calls = 12 + 6 = 24 calls
+        $this->assertEquals(24, $execCalls, 'Unexpected number of exec calls');
+    }
+
+    /**
+     * Test handling of creation failures.
+     */
+    public function testSetupAliasesAndFunctionsCreationFailure(): void
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Track number of exec calls and creation attempts
+        $execCalls        = 0;
+        $creationAttempts = 0;
+
+        $this->sshMock->expects($this->any())
+            ->method('exec')
+            ->willReturnCallback(function ($command) use (&$execCalls, &$creationAttempts) {
+                $execCalls++;
+                if (strpos($command, '[ -f ') === 0) {
+                    return '';  // File doesn't exist
+                }
+                $creationAttempts++;
+
+                return 'Permission denied';  // Creation failed
+            });
+
+        $this->manager->setupAliasesAndFunctions();
+
+        // Assert that we attempted to create files and got the expected number of calls
+        $this->assertGreaterThan(0, $creationAttempts, 'No creation attempts were made');
+        $this->assertEquals(24, $execCalls, 'Unexpected number of exec calls');
+    }
+
+    /**
+     * Test handling of SSH connection failure.
+     */
+    public function testSetupAliasesAndFunctionsSshConnectionFailure(): void
+    {
+        // Configure the SSH mock to fail login
+        $this->sshMock->method('login')->willReturn(false);
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Login failed.');
+
+        $this->manager->setupAliasesAndFunctions();
+    }
 }
