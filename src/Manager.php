@@ -21,6 +21,9 @@ use FOfX\Helper;
  */
 class Manager
 {
+    // Used to prevent interactive prompts in non-interactive shell
+    public const NONINTERACTIVE_SHELL = 'DEBIAN_FRONTEND=noninteractive';
+
     private $config;
     private $cyberApi;
     private $dropletName;
@@ -1677,5 +1680,75 @@ EOF',
         }
 
         return $success;
+    }
+
+    /**
+     * Updates CyberPanel using a noninteractive shell.
+     *
+     * This method performs a system update of CyberPanel using the official preUpgrade script
+     * in a noninteractive way. It prevents interactive prompts and executes the update script
+     * with appropriate timeouts.
+     *
+     * @param bool $updateOs Whether to also update the operating system packages
+     * @param int  $timeout  SSH timeout in seconds (default: 3600 = 1 hour)
+     *
+     * @return bool Returns true if the update was successful, false otherwise
+     */
+    public function updateCyberPanel(bool $updateOs = true, int $timeout = 3600): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        try {
+            // Store the original timeout
+            $originalTimeout = $this->sshConnection->getTimeout();
+
+            // Set a longer timeout for the update process
+            $this->sshConnection->setTimeout($timeout);
+
+            if ($updateOs) {
+                // Update OS packages first
+                $this->logger->info('Updating operating system packages...');
+                $updateCommand = sprintf(
+                    '%s apt-get update && %s apt-get -y upgrade',
+                    self::NONINTERACTIVE_SHELL,
+                    self::NONINTERACTIVE_SHELL
+                );
+                $output = Helper\trim_if_string($this->sshConnection->exec($updateCommand));
+                if ($output === false || $output === null) {
+                    $this->logger->error('Failed to update OS packages');
+
+                    return false;
+                }
+                $this->logger->info('OS packages updated successfully');
+            }
+
+            // Run the official preUpgrade script
+            $this->logger->info('Running CyberPanel update script...');
+            $updateCommand = sprintf(
+                '%s sh <(curl https://raw.githubusercontent.com/usmannasir/cyberpanel/stable/preUpgrade.sh || wget -O - https://raw.githubusercontent.com/usmannasir/cyberpanel/stable/preUpgrade.sh)',
+                self::NONINTERACTIVE_SHELL
+            );
+            $output = Helper\trim_if_string($this->sshConnection->exec($updateCommand));
+
+            if ($output === false || $output === null) {
+                $this->logger->error('Failed to run CyberPanel update script');
+
+                return false;
+            }
+
+            $this->logger->info('CyberPanel update completed successfully');
+
+            return true;
+        } catch (\Exception $e) {
+            $this->logger->error('Error during CyberPanel update: ' . $e->getMessage());
+
+            return false;
+        } finally {
+            // Restore the original timeout if it was changed
+            if (isset($originalTimeout)) {
+                $this->sshConnection->setTimeout($originalTimeout);
+            }
+        }
     }
 }

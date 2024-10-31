@@ -2926,4 +2926,198 @@ class ManagerTest extends TestCase
         $result = $this->manager->configureScreen();
         $this->assertFalse($result);
     }
+
+    /**
+     * Test successful CyberPanel update with OS update.
+     */
+    public function testUpdateCyberPanelWithOsUpdateSuccess(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Store original timeout
+        $originalTimeout = 60;
+        $this->sshMock->method('getTimeout')->willReturn($originalTimeout);
+
+        // Track timeout calls
+        $timeoutCalls = [];
+        $this->sshMock->expects($this->exactly(2))
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) use (&$timeoutCalls) {
+                $timeoutCalls[] = $timeout;
+
+                return true;
+            });
+
+        // Track exec calls
+        /** @var array<int, string> $execCalls */
+        $execCalls = [];
+        $this->sshMock->expects($this->exactly(2))
+            ->method('exec')
+            ->willReturnCallback(function ($command) use (&$execCalls) {
+                $execCalls[] = $command;
+
+                return 'Success';
+            });
+
+        $result = $this->manager->updateCyberPanel(true);
+
+        // Verify timeout was set and restored correctly
+        $this->assertEquals([3600, $originalTimeout], $timeoutCalls);
+
+        // Verify the correct commands were executed in order
+        $this->assertStringContainsString('DEBIAN_FRONTEND=noninteractive apt-get update', $execCalls[0]);
+        $this->assertStringContainsString('DEBIAN_FRONTEND=noninteractive apt-get -y upgrade', $execCalls[0]);
+        $this->assertStringContainsString('DEBIAN_FRONTEND=noninteractive sh <(curl https://raw.githubusercontent.com/usmannasir/cyberpanel/stable/preUpgrade.sh', $execCalls[1]);
+
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test successful CyberPanel update without OS update.
+     */
+    public function testUpdateCyberPanelWithoutOsUpdateSuccess(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Track timeout calls
+        $timeoutCalls = [];
+        $this->sshMock->expects($this->exactly(2))
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) use (&$timeoutCalls) {
+                $timeoutCalls[] = $timeout;
+
+                return true;
+            });
+
+        // Track exec calls
+        $execCalls = [];
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturnCallback(function ($command) use (&$execCalls) {
+                $execCalls[] = $command;
+
+                return 'Success';
+            });
+
+        $result = $this->manager->updateCyberPanel(false);
+
+        // Verify timeout was set and restored correctly
+        $this->assertEquals([3600, 60], $timeoutCalls);
+
+        // Verify only CyberPanel update was executed
+        $this->assertCount(1, $execCalls);
+        $this->assertStringContainsString('DEBIAN_FRONTEND=noninteractive sh <(curl https://raw.githubusercontent.com/usmannasir/cyberpanel/stable/preUpgrade.sh', $execCalls[0]);
+
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test CyberPanel update with OS update failure.
+     */
+    public function testUpdateCyberPanelOsUpdateFailure(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Track timeout calls
+        $timeoutCalls = [];
+        $this->sshMock->expects($this->exactly(2))
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) use (&$timeoutCalls) {
+                $timeoutCalls[] = $timeout;
+
+                return true;
+            });
+
+        // Expect OS update to fail
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturn(false);
+
+        $result = $this->manager->updateCyberPanel(true);
+
+        // Verify timeout was set and restored correctly
+        $this->assertEquals([3600, 60], $timeoutCalls);
+
+        $this->assertFalse($result);
+    }
+
+    /**
+     * Test CyberPanel update failure.
+     */
+    public function testUpdateCyberPanelUpdateFailure(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Track timeout calls
+        $timeoutCalls = [];
+        $this->sshMock->expects($this->exactly(2))
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) use (&$timeoutCalls) {
+                $timeoutCalls[] = $timeout;
+
+                return true;
+            });
+
+        // Expect CyberPanel update to fail
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturn(false);
+
+        $result = $this->manager->updateCyberPanel(false);
+
+        // Verify timeout was set and restored correctly
+        $this->assertEquals([3600, 60], $timeoutCalls);
+
+        $this->assertFalse($result);
+    }
+
+    /**
+     * Test CyberPanel update with custom timeout.
+     */
+    public function testUpdateCyberPanelCustomTimeout(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Store original timeout
+        $originalTimeout = 60;
+        $this->sshMock->method('getTimeout')->willReturn($originalTimeout);
+
+        // Track timeout calls
+        $timeoutCalls = [];
+        $this->sshMock->expects($this->exactly(2))
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) use (&$timeoutCalls) {
+                $timeoutCalls[] = $timeout;
+
+                return true;
+            });
+
+        // Track exec calls
+        $execCalls = [];
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturnCallback(function ($command) use (&$execCalls) {
+                $execCalls[] = $command;
+
+                return 'Success';
+            });
+
+        $result = $this->manager->updateCyberPanel(false, 7200);
+
+        // Verify timeout was set and restored correctly
+        $this->assertEquals([7200, $originalTimeout], $timeoutCalls);
+
+        // Verify command includes noninteractive prefix
+        $this->assertStringContainsString('DEBIAN_FRONTEND=noninteractive', $execCalls[0]);
+
+        $this->assertTrue($result);
+    }
 }
