@@ -3120,4 +3120,340 @@ class ManagerTest extends TestCase
 
         $this->assertTrue($result);
     }
+
+    private function getPrivateMethod($className, $methodName)
+    {
+        $reflection = new \ReflectionClass($className);
+        $method     = $reflection->getMethod($methodName);
+        $method->setAccessible(true);
+
+        return $method;
+    }
+
+    public function testExecuteCommand()
+    {
+        $executeCommand = $this->getPrivateMethod(Manager::class, 'executeCommand');
+
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->with($this->stringContains('test command'))
+            ->willReturn('Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>');
+
+        $this->mockLogger->expects($this->once())
+            ->method('info')
+            ->with(
+                'Command output: test command',
+                ['output' => 'Command output']
+            );
+
+        $result = $executeCommand->invoke($this->manager, 'test command');
+        $this->assertTrue($result);
+    }
+
+    public function testExecuteCommandFailure()
+    {
+        $executeCommand = $this->getPrivateMethod(Manager::class, 'executeCommand');
+
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturn('Error output<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>');
+
+        $this->mockLogger->expects($this->once())
+            ->method('error')
+            ->with(
+                'Command failed with exit code 1: failing command',
+                ['output' => 'Error output']
+            );
+
+        $result = $executeCommand->invoke($this->manager, 'failing command');
+        $this->assertFalse($result);
+    }
+
+    public function testInstallPhpVersionsAndExtensionsSuccess(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Track timeout calls
+        $timeoutCalls = [];
+        $this->sshMock->expects($this->exactly(2))
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) use (&$timeoutCalls) {
+                $timeoutCalls[] = $timeout;
+
+                return true;
+            });
+
+        // Track command executions with proper exit code format
+        $expectedCommands = [
+            'sudo add-apt-repository -y ppa:ondrej/php',
+            'sudo apt-get update',
+            'sudo apt-get install -y php8.2 php8.3',
+            // PHP versions extensions
+            [
+                'type'       => 'php7.4',
+                'extensions' => [
+                    'bcmath',
+                    'cli',
+                    'common',
+                    'ctype',
+                    'curl',
+                    'dev',
+                    'dom',
+                    'exif',
+                    'fileinfo',
+                    'gd',
+                    'iconv',
+                    'intl',
+                    'mbstring',
+                    'mysql',
+                    'opcache',
+                    'pdo',
+                    'redis',
+                    'sqlite3',
+                    'tokenizer',
+                    'xml',
+                    'zip',
+                    'json',
+                ],
+            ],
+            [
+                'type'       => 'php8.0',
+                'extensions' => [
+                    'bcmath',
+                    'cli',
+                    'common',
+                    'ctype',
+                    'curl',
+                    'dev',
+                    'dom',
+                    'exif',
+                    'fileinfo',
+                    'gd',
+                    'iconv',
+                    'intl',
+                    'mbstring',
+                    'mysql',
+                    'opcache',
+                    'pdo',
+                    'redis',
+                    'sqlite3',
+                    'tokenizer',
+                    'xml',
+                    'zip',
+                ],
+            ],
+            [
+                'type'       => 'php8.1',
+                'extensions' => [
+                    'bcmath',
+                    'cli',
+                    'common',
+                    'ctype',
+                    'curl',
+                    'dev',
+                    'dom',
+                    'exif',
+                    'fileinfo',
+                    'gd',
+                    'iconv',
+                    'intl',
+                    'mbstring',
+                    'mysql',
+                    'opcache',
+                    'pdo',
+                    'redis',
+                    'sqlite3',
+                    'tokenizer',
+                    'xml',
+                    'zip',
+                ],
+            ],
+            [
+                'type'       => 'php8.2',
+                'extensions' => [
+                    'bcmath',
+                    'cli',
+                    'common',
+                    'ctype',
+                    'curl',
+                    'dev',
+                    'dom',
+                    'exif',
+                    'fileinfo',
+                    'gd',
+                    'iconv',
+                    'intl',
+                    'mbstring',
+                    'mysql',
+                    'opcache',
+                    'pdo',
+                    'redis',
+                    'sqlite3',
+                    'tokenizer',
+                    'xml',
+                    'zip',
+                ],
+            ],
+            [
+                'type'       => 'php8.3',
+                'extensions' => [
+                    'bcmath',
+                    'cli',
+                    'common',
+                    'ctype',
+                    'curl',
+                    'dev',
+                    'dom',
+                    'exif',
+                    'fileinfo',
+                    'gd',
+                    'iconv',
+                    'intl',
+                    'mbstring',
+                    'mysql',
+                    'opcache',
+                    'pdo',
+                    'redis',
+                    'sqlite3',
+                    'tokenizer',
+                    'xml',
+                    'zip',
+                ],
+            ],
+            'sudo update-alternatives --install /usr/bin/php php /usr/bin/php8.3 1',
+            'sudo update-alternatives --set php /usr/bin/php8.3',
+        ];
+
+        $commandIndex = 0;
+        $this->sshMock->expects($this->exactly(count($expectedCommands)))
+            ->method('exec')
+            ->willReturnCallback(function ($command) use (&$commandIndex, $expectedCommands) {
+                // Remove DEBIAN_FRONTEND prefix and exit code capture suffix
+                $cleanCommand = preg_replace('/^DEBIAN_FRONTEND=noninteractive /', '', $command);
+                $cleanCommand = preg_replace('/ 2>&1; echo "<<<EXITCODE_DELIMITER>>>\$\?<<<EXITCODE_END>>>"$/', '', $cleanCommand);
+
+                // Handle PHP extension commands specially
+                if ($commandIndex >= 3 && $commandIndex <= 7) {
+                    if (strpos($cleanCommand, 'sudo apt-get install -y') === 0) {
+                        $phpVersion         = $expectedCommands[$commandIndex]['type'];
+                        $expectedExtensions = $expectedCommands[$commandIndex]['extensions'];
+
+                        // Extract actual extensions from command
+                        preg_match_all("/$phpVersion-(\w+)/", $cleanCommand, $matches);
+                        $actualExtensions = $matches[1];
+
+                        // Sort both arrays for comparison
+                        sort($expectedExtensions);
+                        sort($actualExtensions);
+
+                        if ($expectedExtensions !== $actualExtensions) {
+                            return 'Command mismatch<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>';
+                        }
+                    }
+                } else {
+                    // For non-PHP extension commands, do exact match
+                    if (strpos($cleanCommand, $expectedCommands[$commandIndex]) === false) {
+                        return 'Command mismatch<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>';
+                    }
+                }
+
+                $commandIndex++;
+
+                return 'Success<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
+            });
+
+        $result = $this->manager->installPhpVersionsAndExtensions(true, 1800, '8.3');
+        $this->assertTrue($result);
+    }
+
+    public function testInstallPhpVersionsAndExtensionsInvalidVersion(): void
+    {
+        // Configure the SSH mock first
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Set the SSH connection
+        $this->manager->setSshConnection($this->sshMock);
+
+        // Now test the invalid version
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid PHP version: 8.4');
+
+        $this->manager->installPhpVersionsAndExtensions(true, 1800, '8.4');
+    }
+
+    public function testInstallPhpVersionsAndExtensionsCommandFailure(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Set the SSH connection
+        $this->manager->setSshConnection($this->sshMock);
+
+        // Track timeout calls
+        $this->sshMock->expects($this->exactly(2))
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) {
+                return true;
+            });
+
+        // Simulate a command failure
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturn('Command failed<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>');
+
+        // Expect error to be logged
+        $this->mockLogger->expects($this->once())
+            ->method('error')
+            ->with(
+                $this->stringContains('Command failed with exit code 1'),
+                $this->arrayHasKey('output')
+            );
+
+        $result = $this->manager->installPhpVersionsAndExtensions(true, 1800, '8.3');
+        $this->assertFalse($result);
+    }
+
+    public function testInstallPhpVersionsAndExtensionsTimeoutHandling(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Set the SSH connection
+        $this->manager->setSshConnection($this->sshMock);
+
+        // Track timeout modifications
+        /** @var array<int, string> $timeoutSequence */
+        $timeoutSequence = [];
+        $this->sshMock->expects($this->exactly(2))
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) use (&$timeoutSequence) {
+                $timeoutSequence[] = $timeout;
+
+                return true;
+            });
+
+        // Simulate a command that succeeds but throws an exception later
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturnCallback(function () {
+                throw new \Exception('Simulated timeout error');
+            });
+
+        // Expect error to be logged
+        $this->mockLogger->expects($this->once())
+            ->method('error')
+            ->with($this->stringContains('Error during PHP installation'));
+
+        $customTimeout = 2400;
+        $result        = $this->manager->installPhpVersionsAndExtensions(true, $customTimeout, '8.3');
+
+        $this->assertFalse($result);
+        $this->assertEquals($customTimeout, $timeoutSequence[0], 'Custom timeout not set correctly');
+        $this->assertEquals(60, $timeoutSequence[1], 'Original timeout not restored');
+    }
 }

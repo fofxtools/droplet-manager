@@ -5,7 +5,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use FOfX\DropletManager\Manager;
 use FOfX\Helper;
 
-$manager   = new Manager('test2');
+$manager   = new Manager('test');
 $cyberLink = $manager->connectCyberLink();
 
 //$domain = 'iffduruguay.org';
@@ -64,4 +64,6 @@ $domain = '022679.xyz';
 
 //var_dump($manager->configureScreen());
 
-var_dump($manager->updateCyberPanel());
+//var_dump($manager->updateCyberPanel());
+
+//var_dump($manager->installPhpVersionsAndExtensions(false));

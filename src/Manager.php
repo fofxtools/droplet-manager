@@ -1751,4 +1751,207 @@ EOF',
             }
         }
     }
+
+    /**
+     * Installs and configures multiple PHP versions with extensions.
+     *
+     * This method:
+     * 1. Adds the Ondřej Surý PPA for PHP
+     * 2. Installs PHP 8.2 and 8.3 core packages
+     * 3. Installs/upgrades specified extensions for PHP 7.4-8.3
+     * 4. Optionally sets a default PHP version
+     *
+     * @param bool        $updateApt         Whether to run apt-get update before installation
+     * @param int         $timeout           SSH timeout in seconds (default: 1800 = 30 minutes)
+     * @param string|null $defaultPhpVersion PHP version to set as default (e.g., '8.3')
+     *
+     * @throws \InvalidArgumentException If an invalid PHP version is provided
+     * @throws \Exception                If SSH connection fails or commands cannot be executed
+     *
+     * @return bool Returns true if all operations were successful, false otherwise
+     */
+    public function installPhpVersionsAndExtensions(bool $updateApt = true, int $timeout = 1800, ?string $defaultPhpVersion = '8.3'): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        try {
+            // Store and set timeout
+            $originalTimeout = $this->sshConnection->getTimeout();
+            $this->sshConnection->setTimeout($timeout);
+
+            // Define a shared list of extensions (without json)
+            $sharedExtensions = [
+                'bcmath',
+                'cli',
+                'common',
+                'ctype',
+                'curl',
+                'dev',
+                'dom',
+                'exif',
+                'fileinfo',
+                'gd',
+                'iconv',
+                'intl',
+                'mbstring',
+                'mysql',
+                'opcache',
+                'pdo',
+                'redis',
+                'sqlite3',
+                'tokenizer',
+                'xml',
+                'zip',
+            ];
+
+            // Define PHP versions and their extensions, adding `json` only for PHP 7.4
+            $phpExtensions = [
+                '7.4' => array_merge($sharedExtensions, ['json']),
+                '8.0' => $sharedExtensions,
+                '8.1' => $sharedExtensions,
+                '8.2' => $sharedExtensions,
+                '8.3' => $sharedExtensions,
+            ];
+
+            // Validate default PHP version if provided
+            if ($defaultPhpVersion !== null && !array_key_exists($defaultPhpVersion, $phpExtensions)) {
+                throw new \InvalidArgumentException("Invalid PHP version: $defaultPhpVersion");
+            }
+
+            // Add PHP repository and update
+            $this->logger->info('Adding PHP repository...');
+            $commands = [
+                'sudo add-apt-repository -y ppa:ondrej/php',
+            ];
+
+            if ($updateApt) {
+                $commands[] = 'sudo apt-get update';
+            }
+
+            foreach ($commands as $command) {
+                if (!$this->executeCommand($command)) {
+                    return false;
+                }
+            }
+
+            // Install PHP 8.2 and 8.3 core
+            $this->logger->info('Installing PHP 8.2 and 8.3 core packages...');
+            if (!$this->executeCommand('sudo apt-get install -y php8.2 php8.3')) {
+                return false;
+            }
+
+            // Install/upgrade extensions for each PHP version
+            foreach ($phpExtensions as $version => $extensions) {
+                $this->logger->info("Installing/upgrading extensions for PHP $version...");
+
+                // Build extension packages string
+                $extensionPackagesArray = [];
+                foreach ($extensions as $ext) {
+                    $extensionPackagesArray[] = "php$version-$ext";
+                }
+                $extensionPackages = implode(' ', $extensionPackagesArray);
+
+                if (!$this->executeCommand("sudo apt-get install -y $extensionPackages")) {
+                    return false;
+                }
+
+                $this->logger->info("Completed extensions for PHP $version");
+            }
+
+            // Set default PHP version if specified
+            if ($defaultPhpVersion) {
+                $this->logger->info("Setting PHP $defaultPhpVersion as default...");
+
+                // First, configure the alternatives
+                if (!$this->executeCommand(
+                    "sudo update-alternatives --install /usr/bin/php php /usr/bin/php$defaultPhpVersion 1"
+                )) {
+                    return false;
+                }
+
+                // Then set it as default
+                if (!$this->executeCommand(
+                    "sudo update-alternatives --set php /usr/bin/php$defaultPhpVersion"
+                )) {
+                    return false;
+                }
+
+                $this->logger->info("PHP $defaultPhpVersion set as default version");
+            }
+
+            $this->logger->info('PHP installation and configuration completed successfully');
+
+            return true;
+        } catch (\InvalidArgumentException $e) {
+            // Rethrow InvalidArgumentException
+            throw $e;
+        } catch (\Exception $e) {
+            $this->logger->error('Error during PHP installation: ' . $e->getMessage());
+
+            return false;
+        } finally {
+            // Restore original timeout
+            if (isset($originalTimeout)) {
+                $this->sshConnection->setTimeout($originalTimeout);
+            }
+        }
+    }
+
+    /**
+     * Executes a shell command with NONINTERACTIVE_SHELL prefix and captures the exit code.
+     *
+     * @param string $command The command to execute
+     *
+     * @return bool True if command executed successfully (exit code 0), false otherwise
+     */
+    private function executeCommand(string $command): bool
+    {
+        // Append stderr redirection and capture exit code with distinct delimiters
+        $fullCommand = self::NONINTERACTIVE_SHELL . ' ' . $command .
+            ' 2>&1; echo "<<<EXITCODE_DELIMITER>>>$?<<<EXITCODE_END>>>"';
+
+        // Execute the command, capture the output, and trim_if_string() it
+        $output = Helper\trim_if_string($this->sshConnection->exec($fullCommand));
+
+        if ($output === false) {
+            $this->logger->error(
+                'SSH execution failed for command: ' . $command
+            );
+
+            return false;
+        }
+
+        // Extract exit code from output using regex
+        if (preg_match('/<<<EXITCODE_DELIMITER>>>(\d+)<<<EXITCODE_END>>>$/', $output, $matches)) {
+            $exitCode = (int) $matches[1];
+            // Remove exit code delimiter pattern from output
+            $output = preg_replace('/<<<EXITCODE_DELIMITER>>>\d+<<<EXITCODE_END>>>$/', '', $output);
+        } else {
+            $this->logger->error(
+                'Failed to get exit code for command: ' . $command,
+                ['output' => $output]
+            );
+
+            return false;
+        }
+
+        if ($exitCode !== 0) {
+            $this->logger->error(
+                'Command failed with exit code ' . $exitCode . ': ' . $command,
+                ['output' => $output]
+            );
+
+            return false;
+        }
+
+        if (!empty($output)) {
+            $this->logger->info(
+                'Command output: ' . $command,
+                ['output' => $output]
+            );
+        }
+
+        return true;
+    }
 }
