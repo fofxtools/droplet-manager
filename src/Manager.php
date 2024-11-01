@@ -34,6 +34,7 @@ class Manager
     private $cyberLinkConnection;
     private Logger $logger;
     private $namecheapApi;
+    private bool $verbose = false;
 
     /**
      * Constructor: Retrieve the configuration for DigitalOcean droplet management.
@@ -75,6 +76,28 @@ class Manager
         } else {
             $this->logger = $logger;
         }
+    }
+
+    /**
+     * Set whether to display verbose command output.
+     *
+     * @param bool $verbose Whether to show detailed command output.
+     *
+     * @return void
+     */
+    public function setVerbose(bool $verbose): void
+    {
+        $this->verbose = $verbose;
+    }
+
+    /**
+     * Get whether verbose command output is enabled.
+     *
+     * @return bool
+     */
+    public function isVerbose(): bool
+    {
+        return $this->verbose;
     }
 
     /**
@@ -1709,29 +1732,29 @@ EOF',
             if ($updateOs) {
                 // Update OS packages first
                 $this->logger->info('Updating operating system packages...');
-                $updateCommand = sprintf(
-                    '%s apt-get update && %s apt-get -y upgrade',
-                    self::NONINTERACTIVE_SHELL,
-                    self::NONINTERACTIVE_SHELL
-                );
-                $output = Helper\trim_if_string($this->sshConnection->exec($updateCommand));
-                if ($output === false || $output === null) {
-                    $this->logger->error('Failed to update OS packages');
+
+                // Execute update and upgrade separately, since executeCommand() will not work
+                // with && and self::NONINTERACTIVE_SHELL
+                if (!$this->executeCommand('apt-get update')) {
+                    $this->logger->error('Failed to update package lists');
 
                     return false;
                 }
+
+                if (!$this->executeCommand('apt-get -y upgrade')) {
+                    $this->logger->error('Failed to upgrade packages');
+
+                    return false;
+                }
+
                 $this->logger->info('OS packages updated successfully');
             }
 
             // Run the official preUpgrade script
             $this->logger->info('Running CyberPanel update script...');
-            $updateCommand = sprintf(
-                '%s sh <(curl https://raw.githubusercontent.com/usmannasir/cyberpanel/stable/preUpgrade.sh || wget -O - https://raw.githubusercontent.com/usmannasir/cyberpanel/stable/preUpgrade.sh)',
-                self::NONINTERACTIVE_SHELL
-            );
-            $output = Helper\trim_if_string($this->sshConnection->exec($updateCommand));
+            $updateCommand = 'sh <(curl https://raw.githubusercontent.com/usmannasir/cyberpanel/stable/preUpgrade.sh || wget -O - https://raw.githubusercontent.com/usmannasir/cyberpanel/stable/preUpgrade.sh)';
 
-            if ($output === false || $output === null) {
+            if (!$this->executeCommand($updateCommand)) {
                 $this->logger->error('Failed to run CyberPanel update script');
 
                 return false;
@@ -1945,7 +1968,7 @@ EOF',
             return false;
         }
 
-        if (!empty($output)) {
+        if ($this->verbose && !empty($output)) {
             $this->logger->info(
                 'Command output: ' . $command,
                 ['output' => $output]

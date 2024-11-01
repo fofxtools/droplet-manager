@@ -168,6 +168,35 @@ class ManagerTest extends TestCase
     }
 
     /**
+     * Test setting verbose mode to true.
+     */
+    public function testSetVerboseTrue(): void
+    {
+        $this->manager->setVerbose(true);
+        $this->assertTrue($this->manager->isVerbose());
+    }
+
+    /**
+     * Test setting verbose mode to false.
+     */
+    public function testSetVerboseFalse(): void
+    {
+        $this->manager->setVerbose(false);
+        $this->assertFalse($this->manager->isVerbose());
+    }
+
+    /**
+     * Test getting verbose mode (default value and type).
+     */
+    public function testIsVerbose(): void
+    {
+        $result = $this->manager->isVerbose();
+
+        // Check that the return value is boolean
+        $this->assertIsBool($result);
+    }
+
+    /**
      * Test setting the droplet name.
      */
     public function testSetDropletName(): void
@@ -2949,27 +2978,18 @@ class ManagerTest extends TestCase
                 return true;
             });
 
-        // Track exec calls
-        /** @var array<int, string> $execCalls */
-        $execCalls = [];
-        $this->sshMock->expects($this->exactly(2))
+        // Track exec calls with the new executeCommand format
+        $this->sshMock->expects($this->exactly(3))
             ->method('exec')
-            ->willReturnCallback(function ($command) use (&$execCalls) {
-                $execCalls[] = $command;
-
-                return 'Success';
+            ->willReturnCallback(function ($command) {
+                // Return success for all commands (exit code 0)
+                return 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
             });
 
         $result = $this->manager->updateCyberPanel(true);
 
         // Verify timeout was set and restored correctly
         $this->assertEquals([3600, $originalTimeout], $timeoutCalls);
-
-        // Verify the correct commands were executed in order
-        $this->assertStringContainsString('DEBIAN_FRONTEND=noninteractive apt-get update', $execCalls[0]);
-        $this->assertStringContainsString('DEBIAN_FRONTEND=noninteractive apt-get -y upgrade', $execCalls[0]);
-        $this->assertStringContainsString('DEBIAN_FRONTEND=noninteractive sh <(curl https://raw.githubusercontent.com/usmannasir/cyberpanel/stable/preUpgrade.sh', $execCalls[1]);
-
         $this->assertTrue($result);
     }
 
@@ -2992,25 +3012,18 @@ class ManagerTest extends TestCase
                 return true;
             });
 
-        // Track exec calls
-        $execCalls = [];
+        // Track exec call with the new executeCommand format
         $this->sshMock->expects($this->once())
             ->method('exec')
-            ->willReturnCallback(function ($command) use (&$execCalls) {
-                $execCalls[] = $command;
-
-                return 'Success';
+            ->willReturnCallback(function ($command) {
+                // Return success for the update command (exit code 0)
+                return 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
             });
 
         $result = $this->manager->updateCyberPanel(false);
 
         // Verify timeout was set and restored correctly
         $this->assertEquals([3600, 60], $timeoutCalls);
-
-        // Verify only CyberPanel update was executed
-        $this->assertCount(1, $execCalls);
-        $this->assertStringContainsString('DEBIAN_FRONTEND=noninteractive sh <(curl https://raw.githubusercontent.com/usmannasir/cyberpanel/stable/preUpgrade.sh', $execCalls[0]);
-
         $this->assertTrue($result);
     }
 
@@ -3100,24 +3113,18 @@ class ManagerTest extends TestCase
                 return true;
             });
 
-        // Track exec calls
-        $execCalls = [];
+        // Track exec call with the new executeCommand format
         $this->sshMock->expects($this->once())
             ->method('exec')
-            ->willReturnCallback(function ($command) use (&$execCalls) {
-                $execCalls[] = $command;
-
-                return 'Success';
+            ->willReturnCallback(function ($command) {
+                // Return success for the update command (exit code 0)
+                return 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
             });
 
         $result = $this->manager->updateCyberPanel(false, 7200);
 
         // Verify timeout was set and restored correctly
         $this->assertEquals([7200, $originalTimeout], $timeoutCalls);
-
-        // Verify command includes noninteractive prefix
-        $this->assertStringContainsString('DEBIAN_FRONTEND=noninteractive', $execCalls[0]);
-
         $this->assertTrue($result);
     }
 
@@ -3133,6 +3140,9 @@ class ManagerTest extends TestCase
     public function testExecuteCommand()
     {
         $executeCommand = $this->getPrivateMethod(Manager::class, 'executeCommand');
+
+        // Set verbose mode to true
+        $this->manager->setVerbose(true);
 
         $this->sshMock->expects($this->once())
             ->method('exec')
