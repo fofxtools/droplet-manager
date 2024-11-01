@@ -35,6 +35,7 @@ class Manager
     private Logger $logger;
     private $namecheapApi;
     private bool $verbose = false;
+    private bool $debug   = false;
 
     /**
      * Constructor: Retrieve the configuration for DigitalOcean droplet management.
@@ -98,6 +99,16 @@ class Manager
     public function isVerbose(): bool
     {
         return $this->verbose;
+    }
+
+    public function setDebug(bool $debug): void
+    {
+        $this->debug = $debug;
+    }
+
+    public function isDebug(): bool
+    {
+        return $this->debug;
     }
 
     /**
@@ -1922,6 +1933,29 @@ EOF',
     }
 
     /**
+     * Executes a command on the SSH connection and logs the result if debugging is enabled.
+     *
+     * @param string  $command The command to execute
+     * @param ?string $context The context of the command execution, for logging purposes
+     *
+     * @return mixed The result of the command execution
+     */
+    private function execSsh(string $command, ?string $context = null): mixed
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        $result = $this->sshConnection->exec($command);
+
+        if ($this->debug) {
+            echo PHP_EOL . "execSsh({$command}, {$context}):" . PHP_EOL;
+            var_dump($result);
+        }
+
+        return $result;
+    }
+
+    /**
      * Executes a shell command with NONINTERACTIVE_SHELL prefix and captures the exit code.
      *
      * @param string $command The command to execute
@@ -1937,6 +1971,11 @@ EOF',
         // Execute the command, capture the output, and trim_if_string() it
         $output = Helper\trim_if_string($this->sshConnection->exec($fullCommand));
 
+        if ($this->debug) {
+            echo PHP_EOL . "executeCommand({$command}):" . PHP_EOL;
+            var_dump($output);
+        }
+
         if ($output === false) {
             $this->logger->error(
                 'SSH execution failed for command: ' . $command
@@ -1946,10 +1985,21 @@ EOF',
         }
 
         // Extract exit code from output using regex
-        if (preg_match('/<<<EXITCODE_DELIMITER>>>(\d+)<<<EXITCODE_END>>>$/', $output, $matches)) {
+        $pregResult = preg_match('/<<<EXITCODE_DELIMITER>>>(\d+)<<<EXITCODE_END>>>$/', $output, $matches);
+
+        if ($this->debug) {
+            echo 'matches:' . PHP_EOL;
+            var_dump($matches);
+        }
+
+        if ($pregResult) {
             $exitCode = (int) $matches[1];
             // Remove exit code delimiter pattern from output
             $output = preg_replace('/<<<EXITCODE_DELIMITER>>>\d+<<<EXITCODE_END>>>$/', '', $output);
+            if ($this->debug) {
+                echo 'output:' . PHP_EOL;
+                var_dump($output);
+            }
         } else {
             $this->logger->error(
                 'Failed to get exit code for command: ' . $command,
@@ -1976,5 +2026,119 @@ EOF',
         }
 
         return true;
+    }
+
+    /**
+     * Configures PHP by creating symlinks and optionally enabling display errors.
+     *
+     * This method:
+     * 1. Creates symlinks for PHP versions 7.4 to 8.3
+     * 2. Optionally enables display_errors in php.ini for each version
+     *
+     * @param bool $enableDisplayErrors Whether to enable display_errors in php.ini
+     *
+     * @return bool Returns true if all operations were successful, false otherwise
+     */
+    public function configurePhp(bool $enableDisplayErrors = false): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        $success = true;
+
+        // Define PHP versions and their paths
+        $phpVersions = [
+            '74' => '7.4',
+            '80' => '8.0',
+            '81' => '8.1',
+            '82' => '8.2',
+            '83' => '8.3',
+        ];
+
+        // Create symlinks for each PHP version
+        foreach ($phpVersions as $shortVersion => $fullVersion) {
+            $sourcePath = "/usr/local/lsws/lsphp{$shortVersion}/bin/php";
+            $targetPath = "/usr/bin/php{$fullVersion}";
+
+            // Check if symlink or file already exists
+            $checkCommand  = "test -e {$targetPath} && echo 'exists'";
+            $symlinkExists = Helper\trim_if_string($this->sshConnection->exec($checkCommand));
+
+            if ($symlinkExists === 'exists') {
+                $this->logger->info("Symlink for PHP {$fullVersion} already exists");
+
+                continue;
+            }
+
+            // Create symlink
+            if (!$this->executeCommand("ln -s {$sourcePath} {$targetPath}")) {
+                $this->logger->error("Failed to create symlink for PHP {$fullVersion}");
+                $success = false;
+
+                continue;
+            }
+
+            $this->logger->info("Created symlink for PHP {$fullVersion}");
+        }
+
+        // Enable display errors if requested
+        if ($enableDisplayErrors) {
+            foreach ($phpVersions as $shortVersion => $fullVersion) {
+                $phpIniPath = "/usr/local/lsws/lsphp{$shortVersion}/etc/php/{$fullVersion}/litespeed/php.ini";
+
+                // Check if display_errors is already On
+                $grepOnCommand   = "grep -i '^display_errors[[:space:]]*=[[:space:]]*On' {$phpIniPath}";
+                $displayErrorsOn = Helper\trim_if_string($this->sshConnection->exec($grepOnCommand));
+
+                if (!empty($displayErrorsOn)) {
+                    $this->logger->info("Display errors already enabled for PHP {$fullVersion}");
+
+                    continue;
+                }
+
+                // Check if display_errors = Off exists
+                $grepOffCommand   = "grep -i '^display_errors[[:space:]]*=[[:space:]]*Off' {$phpIniPath}";
+                $displayErrorsOff = Helper\trim_if_string($this->sshConnection->exec($grepOffCommand));
+
+                if (empty($displayErrorsOff)) {
+                    $this->logger->error("Could not find display_errors = Off line in {$phpIniPath}. Skipping enabling display errors for PHP {$fullVersion}.");
+                    $success = false;
+
+                    continue;
+                }
+
+                // Create backup of php.ini
+                $backupPath = $phpIniPath . '.bak_' . date('Ymd_His');
+                $this->logger->info("Creating backup of {$phpIniPath} at {$backupPath}");
+                if (!$this->executeCommand("cp {$phpIniPath} {$backupPath}")) {
+                    $this->logger->error("Failed to create backup of php.ini for PHP {$fullVersion}");
+                    $success = false;
+
+                    continue;
+                }
+
+                // Replace display_errors = Off with display_errors = On
+                $sedCommand = "sed -i 's/^display_errors[[:space:]]*=[[:space:]]*Off/display_errors = On/I' {$phpIniPath}";
+                if (!$this->executeCommand($sedCommand)) {
+                    $this->logger->error("Failed to enable display errors for PHP {$fullVersion}");
+                    $success = false;
+
+                    continue;
+                }
+
+                // Verify the change
+                $verifyCommand = "grep -i '^display_errors[[:space:]]*=[[:space:]]*On' {$phpIniPath}";
+                $verifyResult  = Helper\trim_if_string($this->sshConnection->exec($verifyCommand));
+
+                if (empty($verifyResult)) {
+                    $this->logger->error("Failed to verify display errors setting for PHP {$fullVersion}");
+                    $success = false;
+                } else {
+                    $this->logger->info("Successfully enabled display errors for PHP {$fullVersion}");
+                }
+            }
+        }
+
+        return $success;
     }
 }

@@ -31,13 +31,13 @@ class CyberLink
     /**
      * CyberLink constructor.
      *
-     * @param      $ip
-     * @param      $user
-     * @param      $password
-     * @param null $key
-     * @param int  $port
-     * @param int  $timeout
-     * @param bool $enableSecureFTP
+     * @param         $ip
+     * @param         $user
+     * @param         $password
+     * @param ?string $key
+     * @param int     $port
+     * @param int     $timeout
+     * @param bool    $enableSecureFTP
      *
      * @throws Exception
      */
@@ -83,8 +83,6 @@ class CyberLink
             $this->fs = new Filesystem($adapter);
         }
         #endregion
-
-        return true;
     }
 
     /**
@@ -209,7 +207,7 @@ $               # end of string
         $i = preg_replace('/^[0-9]+/', '', $i);
         $i = preg_replace('/-$/', '', $i);
 
-        return substr(strtolower($i), 0, 5) . substr(md5(microtime(true)), 0, 5);
+        return substr(strtolower($i), 0, 5) . substr(md5((string)microtime(true)), 0, 5);
     }
 
     /**

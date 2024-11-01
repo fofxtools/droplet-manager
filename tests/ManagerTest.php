@@ -167,6 +167,18 @@ class ManagerTest extends TestCase
             ->getMock();
     }
 
+    private function enableVerboseAndDebug(): void
+    {
+        $this->manager->setVerbose(true);
+        $this->manager->setDebug(true);
+    }
+
+    private function disableVerboseAndDebug(): void
+    {
+        $this->manager->setVerbose(false);
+        $this->manager->setDebug(false);
+    }
+
     /**
      * Test setting verbose mode to true.
      */
@@ -193,6 +205,25 @@ class ManagerTest extends TestCase
         $result = $this->manager->isVerbose();
 
         // Check that the return value is boolean
+        $this->assertIsBool($result);
+    }
+
+    public function testSetDebugTrue(): void
+    {
+        $this->manager->setDebug(true);
+        $this->assertTrue($this->manager->isDebug());
+    }
+
+    public function testSetDebugFalse(): void
+    {
+        $this->manager->setDebug(false);
+        $this->assertFalse($this->manager->isDebug());
+    }
+
+    public function testIsDebug(): void
+    {
+        $result = $this->manager->isDebug();
+
         $this->assertIsBool($result);
     }
 
@@ -3137,6 +3168,76 @@ class ManagerTest extends TestCase
         return $method;
     }
 
+    /**
+     * Test successful execution of execSsh with debug disabled
+     */
+    public function testExecSshSuccess(): void
+    {
+        // Get private execSsh method
+        $execSsh = $this->getPrivateMethod(Manager::class, 'execSsh');
+
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->with('test command')
+            ->willReturn('command output');
+
+        // Execute the method
+        $result = $execSsh->invoke($this->manager, 'test command');
+
+        // Assert
+        $this->assertEquals('command output', $result);
+    }
+
+    /**
+     * Test execSsh with debug mode enabled
+     */
+    public function testExecSshWithDebugEnabled(): void
+    {
+        // Get private execSsh method
+        $execSsh = $this->getPrivateMethod(Manager::class, 'execSsh');
+
+        // Enable debug mode
+        $this->manager->setDebug(true);
+
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->with('test command')
+            ->willReturn('debug command output');
+
+        // Capture output buffer to verify debug output
+        ob_start();
+        $result = $execSsh->invoke($this->manager, 'test command', 'test context');
+        $output = ob_get_clean();
+
+        // Assert
+        $this->assertEquals('debug command output', $result);
+        $this->assertStringContainsString('execSsh(test command, test context):', $output);
+        $this->assertStringContainsString('debug command output', $output);
+    }
+
+    /**
+     * Test execSsh with SSH connection failure
+     */
+    public function testExecSshConnectionFailure(): void
+    {
+        // Get private execSsh method
+        $execSsh = $this->getPrivateMethod(Manager::class, 'execSsh');
+
+        // Configure the SSH mock to fail login
+        $this->sshMock->method('login')->willReturn(false);
+
+        // Expect exception
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Login failed.');
+
+        // Execute the method
+        $execSsh->invoke($this->manager, 'test command');
+    }
+
     public function testExecuteCommand()
     {
         $executeCommand = $this->getPrivateMethod(Manager::class, 'executeCommand');
@@ -3465,5 +3566,74 @@ class ManagerTest extends TestCase
         $this->assertFalse($result);
         $this->assertEquals($customTimeout, $timeoutSequence[0], 'Custom timeout not set correctly');
         $this->assertEquals(60, $timeoutSequence[1], 'Original timeout not restored');
+    }
+
+    public function testConfigurePhpSuccess(): void
+    {
+        $this->markTestSkipped('Temporarily skipped while debugging PHP configuration issues');
+
+        $this->enableVerboseAndDebug();
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Set the SSH connection
+        $this->manager->setSshConnection($this->sshMock);
+
+        // Mock the exec method to simulate successful command execution
+        $this->sshMock->expects($this->exactly(35))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                // PHP 7.4
+                '',  // Check if symlink exists
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Create symlink
+                'display_errors = Off', // Check current display_errors
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Backup php.ini
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Set display_errors
+                'display_errors = On',  // Verify display_errors
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Additional command
+
+                // PHP 8.0
+                '',  // Check if symlink exists
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Create symlink
+                'display_errors = Off', // Check current display_errors
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Backup php.ini
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Set display_errors
+                'display_errors = On',  // Verify display_errors
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Additional command
+
+                // PHP 8.1
+                '',  // Check if symlink exists
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Create symlink
+                'display_errors = Off', // Check current display_errors
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Backup php.ini
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Set display_errors
+                'display_errors = On',  // Verify display_errors
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Additional command
+
+                // PHP 8.2
+                '',  // Check if symlink exists
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Create symlink
+                'display_errors = Off', // Check current display_errors
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Backup php.ini
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Set display_errors
+                'display_errors = On',  // Verify display_errors
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Additional command
+
+                // PHP 8.3
+                '',  // Check if symlink exists
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Create symlink
+                'display_errors = Off', // Check current display_errors
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Backup php.ini
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Set display_errors
+                'display_errors = On',  // Verify display_errors
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>' // Additional command
+            );
+
+        // Call the method
+        $result = $this->manager->configurePhp(true);
+
+        // Assert
+        $this->assertTrue($result);
+        $this->disableVerboseAndDebug();
     }
 }

@@ -8,6 +8,8 @@ use FOfX\Helper;
 $manager   = new Manager('test');
 $cyberLink = $manager->connectCyberLink();
 
+$manager->setVerbose(true);
+
 //$domain = 'iffduruguay.org';
 //$domain = 'examplesite.com';
 //$domain = 'breastsurgeryhawaii.com';
@@ -67,3 +69,5 @@ $domain = '022679.xyz';
 //var_dump($manager->updateCyberPanel());
 
 //var_dump($manager->installPhpVersionsAndExtensions(false));
+
+var_dump($manager->configurePhp(true));
