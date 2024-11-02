@@ -1996,7 +1996,9 @@ EOF',
             $exitCode = (int) $matches[1];
             // Remove exit code delimiter pattern from output
             $output = preg_replace('/<<<EXITCODE_DELIMITER>>>\d+<<<EXITCODE_END>>>$/', '', $output);
+
             if ($this->debug) {
+                echo "exitCode: {$exitCode}" . PHP_EOL;
                 echo 'output:' . PHP_EOL;
                 var_dump($output);
             }
@@ -2062,7 +2064,7 @@ EOF',
 
             // Check if symlink or file already exists
             $checkCommand  = "test -e {$targetPath} && echo 'exists'";
-            $symlinkExists = Helper\trim_if_string($this->sshConnection->exec($checkCommand));
+            $symlinkExists = Helper\trim_if_string($this->execSsh($checkCommand, 'configurePhp'));
 
             if ($symlinkExists === 'exists') {
                 $this->logger->info("Symlink for PHP {$fullVersion} already exists");
@@ -2085,10 +2087,11 @@ EOF',
         if ($enableDisplayErrors) {
             foreach ($phpVersions as $shortVersion => $fullVersion) {
                 $phpIniPath = "/usr/local/lsws/lsphp{$shortVersion}/etc/php/{$fullVersion}/litespeed/php.ini";
+                $this->logger->info("Checking display errors for PHP {$fullVersion} at {$phpIniPath}");
 
                 // Check if display_errors is already On
                 $grepOnCommand   = "grep -i '^display_errors[[:space:]]*=[[:space:]]*On' {$phpIniPath}";
-                $displayErrorsOn = Helper\trim_if_string($this->sshConnection->exec($grepOnCommand));
+                $displayErrorsOn = Helper\trim_if_string($this->execSsh($grepOnCommand, 'configurePhp'));
 
                 if (!empty($displayErrorsOn)) {
                     $this->logger->info("Display errors already enabled for PHP {$fullVersion}");
@@ -2098,7 +2101,7 @@ EOF',
 
                 // Check if display_errors = Off exists
                 $grepOffCommand   = "grep -i '^display_errors[[:space:]]*=[[:space:]]*Off' {$phpIniPath}";
-                $displayErrorsOff = Helper\trim_if_string($this->sshConnection->exec($grepOffCommand));
+                $displayErrorsOff = Helper\trim_if_string($this->execSsh($grepOffCommand, 'configurePhp'));
 
                 if (empty($displayErrorsOff)) {
                     $this->logger->error("Could not find display_errors = Off line in {$phpIniPath}. Skipping enabling display errors for PHP {$fullVersion}.");
@@ -2128,7 +2131,7 @@ EOF',
 
                 // Verify the change
                 $verifyCommand = "grep -i '^display_errors[[:space:]]*=[[:space:]]*On' {$phpIniPath}";
-                $verifyResult  = Helper\trim_if_string($this->sshConnection->exec($verifyCommand));
+                $verifyResult  = Helper\trim_if_string($this->execSsh($verifyCommand, 'configurePhp'));
 
                 if (empty($verifyResult)) {
                     $this->logger->error("Failed to verify display errors setting for PHP {$fullVersion}");

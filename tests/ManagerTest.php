@@ -167,14 +167,45 @@ class ManagerTest extends TestCase
             ->getMock();
     }
 
+    /**
+     * Enable verbose and debug output with a real logger.
+     *
+     * @return void
+     *
+     * @phpstan-ignore-next-line
+     */
     private function enableVerboseAndDebug(): void
     {
+        // Create and set a real logger
+        $reflection     = new \ReflectionClass($this->manager);
+        $loggerProperty = $reflection->getProperty('logger');
+        $loggerProperty->setAccessible(true);
+
+        $realLogger = new \Monolog\Logger('default');
+        $realLogger->pushHandler(new \Monolog\Handler\StreamHandler('php://stdout'));
+        $loggerProperty->setValue($this->manager, $realLogger);
+
+        // Enable verbose and debug modes
         $this->manager->setVerbose(true);
         $this->manager->setDebug(true);
     }
 
+    /**
+     * Disable verbose and debug output and restore mock logger.
+     *
+     * @return void
+     *
+     * @phpstan-ignore-next-line
+     */
     private function disableVerboseAndDebug(): void
     {
+        // Restore the mock logger
+        $reflection     = new \ReflectionClass($this->manager);
+        $loggerProperty = $reflection->getProperty('logger');
+        $loggerProperty->setAccessible(true);
+        $loggerProperty->setValue($this->manager, $this->mockLogger);
+
+        // Disable verbose and debug modes
         $this->manager->setVerbose(false);
         $this->manager->setDebug(false);
     }
@@ -3570,70 +3601,72 @@ class ManagerTest extends TestCase
 
     public function testConfigurePhpSuccess(): void
     {
-        $this->markTestSkipped('Temporarily skipped while debugging PHP configuration issues');
-
-        $this->enableVerboseAndDebug();
-        // Configure the SSH mock
         $this->sshMock->method('login')->willReturn(true);
-
-        // Set the SSH connection
         $this->manager->setSshConnection($this->sshMock);
 
-        // Mock the exec method to simulate successful command execution
+        // For 5 PHP versions (7.4, 8.0, 8.1, 8.2, 8.3), we expect:
+        // - 2 calls per version for symlink creation (10 total)
+        // - 5 calls per version for display_errors modification (25 total)
         $this->sshMock->expects($this->exactly(35))
             ->method('exec')
             ->willReturnOnConsecutiveCalls(
-                // PHP 7.4
-                '',  // Check if symlink exists
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Create symlink
-                'display_errors = Off', // Check current display_errors
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Backup php.ini
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Set display_errors
-                'display_errors = On',  // Verify display_errors
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Additional command
+                // PHP 7.4 symlink
+                '',  // test -e check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
 
-                // PHP 8.0
-                '',  // Check if symlink exists
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Create symlink
-                'display_errors = Off', // Check current display_errors
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Backup php.ini
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Set display_errors
-                'display_errors = On',  // Verify display_errors
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Additional command
+                // PHP 8.0 symlink
+                '',  // test -e check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
 
-                // PHP 8.1
-                '',  // Check if symlink exists
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Create symlink
-                'display_errors = Off', // Check current display_errors
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Backup php.ini
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Set display_errors
-                'display_errors = On',  // Verify display_errors
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Additional command
+                // PHP 8.1 symlink
+                '',  // test -e check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
 
-                // PHP 8.2
-                '',  // Check if symlink exists
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Create symlink
-                'display_errors = Off', // Check current display_errors
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Backup php.ini
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Set display_errors
-                'display_errors = On',  // Verify display_errors
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Additional command
+                // PHP 8.2 symlink
+                '',  // test -e check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
 
-                // PHP 8.3
-                '',  // Check if symlink exists
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Create symlink
-                'display_errors = Off', // Check current display_errors
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Backup php.ini
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Set display_errors
-                'display_errors = On',  // Verify display_errors
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>' // Additional command
+                // PHP 8.3 symlink
+                '',  // test -e check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
+
+                // PHP 7.4 display_errors
+                '',  // grep On check
+                'display_errors = Off', // grep Off check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
+                'display_errors = On',  // grep verify
+
+                // PHP 8.0 display_errors
+                '',  // grep On check
+                'display_errors = Off', // grep Off check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
+                'display_errors = On',  // grep verify
+
+                // PHP 8.1 display_errors
+                '',  // grep On check
+                'display_errors = Off', // grep Off check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
+                'display_errors = On',  // grep verify
+
+                // PHP 8.2 display_errors
+                '',  // grep On check
+                'display_errors = Off', // grep Off check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
+                'display_errors = On',  // grep verify
+
+                // PHP 8.3 display_errors
+                '',  // grep On check
+                'display_errors = Off', // grep Off check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
+                'display_errors = On'   // grep verify
             );
 
-        // Call the method
         $result = $this->manager->configurePhp(true);
-
-        // Assert
         $this->assertTrue($result);
-        $this->disableVerboseAndDebug();
     }
 }
