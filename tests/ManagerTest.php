@@ -3669,4 +3669,133 @@ class ManagerTest extends TestCase
         $result = $this->manager->configurePhp(true);
         $this->assertTrue($result);
     }
+
+    /**
+     * Test successful installation of LiteSpeed PHP versions and extensions.
+     */
+    public function testInstallLiteSpeedPhpVersionsAndExtensionsSuccess(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Track timeout calls
+        $timeoutCalls = [];
+        $this->sshMock->expects($this->exactly(2))
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) use (&$timeoutCalls) {
+                $timeoutCalls[] = $timeout;
+
+                return true;
+            });
+
+        // Track command executions
+        $expectedCommands = [
+            'apt-get update',
+            // PHP 7.4 packages
+            'apt-get install -y lsphp74 lsphp74-apcu lsphp74-common lsphp74-curl lsphp74-dbg ' .
+                'lsphp74-dev lsphp74-igbinary lsphp74-imagick lsphp74-imap lsphp74-intl lsphp74-ioncube ' .
+                'lsphp74-json lsphp74-ldap lsphp74-memcached lsphp74-modules-source lsphp74-msgpack ' .
+                'lsphp74-mysql lsphp74-opcache lsphp74-pear lsphp74-pgsql lsphp74-pspell lsphp74-redis ' .
+                'lsphp74-snmp lsphp74-sqlite3 lsphp74-sybase lsphp74-tidy',
+            // PHP 8.0 packages
+            'apt-get install -y lsphp80 lsphp80-apcu lsphp80-common lsphp80-curl lsphp80-dbg ' .
+                'lsphp80-dev lsphp80-igbinary lsphp80-imagick lsphp80-imap lsphp80-intl ' .
+                'lsphp80-ldap lsphp80-memcached lsphp80-modules-source lsphp80-msgpack lsphp80-mysql ' .
+                'lsphp80-opcache lsphp80-pear lsphp80-pgsql lsphp80-pspell lsphp80-redis lsphp80-snmp ' .
+                'lsphp80-sqlite3 lsphp80-sybase lsphp80-tidy',
+            // PHP 8.1 packages
+            'apt-get install -y lsphp81 lsphp81-apcu lsphp81-common lsphp81-curl lsphp81-dbg ' .
+                'lsphp81-dev lsphp81-igbinary lsphp81-imagick lsphp81-imap lsphp81-intl lsphp81-ioncube ' .
+                'lsphp81-ldap lsphp81-memcached lsphp81-modules-source lsphp81-msgpack lsphp81-mysql ' .
+                'lsphp81-opcache lsphp81-pear lsphp81-pgsql lsphp81-pspell lsphp81-redis lsphp81-snmp ' .
+                'lsphp81-sqlite3 lsphp81-sybase lsphp81-tidy',
+            // PHP 8.2 packages
+            'apt-get install -y lsphp82 lsphp82-apcu lsphp82-common lsphp82-curl lsphp82-dbg ' .
+                'lsphp82-dev lsphp82-igbinary lsphp82-imagick lsphp82-imap lsphp82-intl lsphp82-ioncube ' .
+                'lsphp82-ldap lsphp82-memcached lsphp82-modules-source lsphp82-msgpack lsphp82-mysql ' .
+                'lsphp82-opcache lsphp82-pear lsphp82-pgsql lsphp82-pspell lsphp82-redis lsphp82-snmp ' .
+                'lsphp82-sqlite3 lsphp82-sybase lsphp82-tidy',
+            // PHP 8.3 packages
+            'apt-get install -y lsphp83 lsphp83-apcu lsphp83-common lsphp83-curl lsphp83-dbg ' .
+                'lsphp83-dev lsphp83-igbinary lsphp83-imagick lsphp83-imap lsphp83-intl lsphp83-ioncube ' .
+                'lsphp83-ldap lsphp83-memcached lsphp83-modules-source lsphp83-msgpack lsphp83-mysql ' .
+                'lsphp83-opcache lsphp83-pear lsphp83-pgsql lsphp83-pspell lsphp83-redis lsphp83-snmp ' .
+                'lsphp83-sqlite3 lsphp83-sybase lsphp83-tidy',
+        ];
+
+        $commandIndex = 0;
+        $this->sshMock->expects($this->exactly(count($expectedCommands)))
+            ->method('exec')
+            ->willReturnCallback(function ($command) use (&$commandIndex, $expectedCommands) {
+                // Remove DEBIAN_FRONTEND prefix and exit code capture suffix
+                $cleanCommand = preg_replace('/^DEBIAN_FRONTEND=noninteractive /', '', $command);
+                $cleanCommand = preg_replace('/ 2>&1; echo "<<<EXITCODE_DELIMITER>>>\$\?<<<EXITCODE_END>>>"$/', '', $cleanCommand);
+
+                // Compare with expected command
+                if ($cleanCommand !== $expectedCommands[$commandIndex]) {
+                    return 'Command mismatch<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>';
+                }
+
+                $commandIndex++;
+
+                return 'Success<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
+            });
+
+        // Test installation with default arguments (all versions)
+        $result = $this->manager->installLiteSpeedPhpVersionsAndExtensions();
+
+        // Verify timeout was set and restored correctly
+        $this->assertEquals([1800, 60], $timeoutCalls);
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test LiteSpeed PHP installation with invalid version.
+     */
+    public function testInstallLiteSpeedPhpVersionsAndExtensionsInvalidVersion(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Expect an exception for invalid version
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid PHP version: 8.4');
+
+        $this->manager->installLiteSpeedPhpVersionsAndExtensions(true, 1800, ['8.4']);
+    }
+
+    /**
+     * Test LiteSpeed PHP installation with command failure.
+     */
+    public function testInstallLiteSpeedPhpVersionsAndExtensionsCommandFailure(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Track timeout calls
+        $this->sshMock->expects($this->exactly(2))
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) {
+                return true;
+            });
+
+        // Simulate a command failure
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturn('Command failed<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>');
+
+        // Expect error to be logged
+        $this->mockLogger->expects($this->once())
+            ->method('error')
+            ->with(
+                $this->stringContains('Command failed with exit code 1'),
+                $this->arrayHasKey('output')
+            );
+
+        $result = $this->manager->installLiteSpeedPhpVersionsAndExtensions(true, 1800, ['7.4']);
+        $this->assertFalse($result);
+    }
 }

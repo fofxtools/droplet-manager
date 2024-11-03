@@ -591,7 +591,7 @@ class Manager
 
         // Execute the stat command to get the user owner of the directory
         $command = sprintf('stat -c "%%U" /home/%s', Helper\escapeshellarg_linux($domain));
-        $output  = Helper\trim_if_string($this->sshConnection->exec($command));
+        $output  = Helper\trim_if_string($this->execSsh($command));
 
         // Check for error in the command output or empty response
         if (str_contains($output, 'stat: ') || empty($output)) {
@@ -626,7 +626,7 @@ class Manager
 
         // Check if .htaccess already exists
         $checkCommand = "test -f {$htaccessPath} && echo 'exists' || echo 'not exists'";
-        $checkResult  = Helper\trim_if_string($this->sshConnection->exec($checkCommand));
+        $checkResult  = Helper\trim_if_string($this->execSsh($checkCommand));
 
         if ($checkResult === 'exists') {
             if (!$overwriteHtaccess) {
@@ -657,7 +657,7 @@ EOF',
             $htaccessPath,
             $htaccessContent
         );
-        $output = $this->sshConnection->exec($command);
+        $output = $this->execSsh($command);
 
         if ($output !== '') {
             $this->logger->error("Failed to create/update .htaccess for {$domainName}. Output: {$output}");
@@ -677,7 +677,7 @@ EOF',
 
         // Set the correct ownership for the .htaccess file to the domain owner
         $ownershipCommand = sprintf('chown %s:%s %s', Helper\escapeshellarg_linux($username), Helper\escapeshellarg_linux($username), $htaccessPath);
-        $ownershipOutput  = $this->sshConnection->exec($ownershipCommand);
+        $ownershipOutput  = $this->execSsh($ownershipCommand);
 
         if ($ownershipOutput !== '') {
             $this->logger->error("Failed to set ownership for .htaccess file for {$domainName}. Output: {$ownershipOutput}");
@@ -772,7 +772,7 @@ EOF',
 
         // Execute the grant command via SSH
         try {
-            $output = $this->sshConnection->exec($grantCommand);
+            $output = $this->execSsh($grantCommand);
             $this->logger->info("Remote access granted to database '{$database}' for user '{$username}'.");
 
             return true;
@@ -820,7 +820,7 @@ EOF',
             Helper\escapeshellarg_linux($username),
             Helper\escapeshellarg_linux($newPassword)
         );
-        $output = $this->sshConnection->exec($changePasswordCommand);
+        $output = $this->execSsh($changePasswordCommand);
 
         if ($output === false) {
             $this->logger->error("SSH execution failed for password change command for user: $username");
@@ -839,7 +839,7 @@ EOF',
         // Verify password change
         if ($verifyChange) {
             $verifyCommand = 'sudo passwd -S ' . Helper\escapeshellarg_linux($username);
-            $verifyOutput  = $this->sshConnection->exec($verifyCommand);
+            $verifyOutput  = $this->execSsh($verifyCommand);
 
             // Note: We're still returning true here because the password was likely changed
             if ($verifyOutput === false) {
@@ -881,7 +881,7 @@ EOF',
 
         // Check if symlinks are already enabled (restrained = 0)
         $grepReplacementCheck = 'grep -Pzq ' . Helper\escapeshellarg_linux($replacementPattern) . " $filePath && echo 'exists'";
-        $replacementCheck     = Helper\trim_if_string($this->sshConnection->exec($grepReplacementCheck));
+        $replacementCheck     = Helper\trim_if_string($this->execSsh($grepReplacementCheck));
 
         if ($replacementCheck === 'exists') {
             $this->logger->info("Symbolic links are already enabled for domain: $domainName");
@@ -891,17 +891,17 @@ EOF',
 
         // Check if the original block exists (restrained = 1)
         $grepOriginalCheck = 'grep -Pzq ' . Helper\escapeshellarg_linux($originalPattern) . " $filePath && echo 'exists'";
-        $originalCheck     = Helper\trim_if_string($this->sshConnection->exec($grepOriginalCheck));
+        $originalCheck     = Helper\trim_if_string($this->execSsh($grepOriginalCheck));
 
         if ($originalCheck === 'exists') {
             // Create backup before making changes
             $this->logger->info("Creating backup of httpd_config.conf at: $backupPath");
-            $this->sshConnection->exec("cp $filePath $backupPath");
+            $this->execSsh("cp $filePath $backupPath");
 
             // Use sed to replace restrained 1 with restrained 0 within the domain's virtualHost block
             $sedRestrainedUpdate = "/virtualHost {$domainName} {/,/}/{/restrained/s#1\$#0#}";
             $sedCommand          = "sed -i '{$sedRestrainedUpdate}' $filePath";
-            $sedResult           = Helper\trim_if_string($this->sshConnection->exec($sedCommand));
+            $sedResult           = Helper\trim_if_string($this->execSsh($sedCommand));
 
             if ($sedResult === false) {
                 $this->logger->error("Failed to modify httpd_config.conf for domain: $domainName");
@@ -911,7 +911,7 @@ EOF',
 
             // Verify the changes
             $verifyCommand = 'grep -Pzq ' . Helper\escapeshellarg_linux($replacementPattern) . " $filePath && echo 'updated'";
-            $verifyResult  = Helper\trim_if_string($this->sshConnection->exec($verifyCommand));
+            $verifyResult  = Helper\trim_if_string($this->execSsh($verifyCommand));
 
             if ($verifyResult === 'updated') {
                 $this->logger->info("Symbolic links successfully enabled for domain: $domainName");
@@ -1265,7 +1265,7 @@ EOF',
         $this->verifyConnectionSsh();
 
         // Extract the MySQL root password from /root/.db_password
-        $dbPassword = Helper\trim_if_string($this->sshConnection->exec("grep -w 'root_mysql_pass' {$dbPasswordFile} | cut -d'=' -f2 | tr -d '\"' | sed -n '1p'"));
+        $dbPassword = Helper\trim_if_string($this->execSsh("grep -w 'root_mysql_pass' {$dbPasswordFile} | cut -d'=' -f2 | tr -d '\"' | sed -n '1p'"));
         if (empty($dbPassword)) {
             $this->logger->error("Failed to extract the MySQL root password from {$dbPasswordFile}");
 
@@ -1273,7 +1273,7 @@ EOF',
         }
 
         // Extract the current password from /root/.my.cnf
-        $myCnfPassword = Helper\trim_if_string($this->sshConnection->exec("grep 'password=' {$myCnfFile} | cut -d'=' -f2 | tr -d '\"' | sed -n '1p'"));
+        $myCnfPassword = Helper\trim_if_string($this->execSsh("grep 'password=' {$myCnfFile} | cut -d'=' -f2 | tr -d '\"' | sed -n '1p'"));
         if (empty($myCnfPassword)) {
             $this->logger->error("Failed to extract the current password from {$myCnfFile}");
 
@@ -1290,12 +1290,12 @@ EOF',
         // Backup the /root/.my.cnf file
         $backupFilename = $myCnfFile . '.bak_' . date('Ymd_His');
         $this->logger->info("Creating backup of {$myCnfFile} at: {$backupFilename}");
-        $this->sshConnection->exec("cp {$myCnfFile} {$backupFilename}");
+        $this->execSsh("cp {$myCnfFile} {$backupFilename}");
 
         // Update the password in /root/.my.cnf using sed
         $escapedPassword = Helper\escape_single_quotes_for_sed($dbPassword);
         $updateCommand   = "sed -i 's/password=\".*\"/password=\"$escapedPassword\"/' {$myCnfFile}";
-        $output          = $this->sshConnection->exec($updateCommand);
+        $output          = $this->execSsh($updateCommand);
 
         if ($output !== '') {
             $this->logger->error("Failed to update {$myCnfFile}. Output: {$output}");
@@ -1304,7 +1304,7 @@ EOF',
         }
 
         // Verify the password was updated correctly
-        $verifiedPassword = Helper\trim_if_string($this->sshConnection->exec("grep 'password=' {$myCnfFile} | cut -d'=' -f2 | tr -d '\"' | sed -n '1p'"));
+        $verifiedPassword = Helper\trim_if_string($this->execSsh("grep 'password=' {$myCnfFile} | cut -d'=' -f2 | tr -d '\"' | sed -n '1p'"));
         if ($verifiedPassword !== $dbPassword) {
             $this->logger->error("Password verification failed after update. The password in {$myCnfFile} does not match {$dbPasswordFile}");
 
@@ -1335,7 +1335,7 @@ EOF',
         $this->verifyConnectionSsh();
 
         // Check if the binding already exists with Ctrl+F
-        $existingBinding = Helper\trim_if_string($this->sshConnection->exec("grep '^bind \\^F whereis all' /etc/nanorc"));
+        $existingBinding = Helper\trim_if_string($this->execSsh("grep '^bind \\^F whereis all' /etc/nanorc"));
         if ($existingBinding !== '') {
             $this->logger->info('The Nano "Where Is" binding is already set to Ctrl+F.');
 
@@ -1343,11 +1343,11 @@ EOF',
         }
 
         // Check if the binding is commented out
-        $commentedBinding = Helper\trim_if_string($this->sshConnection->exec("grep '^#.*bind \\^F whereis all' /etc/nanorc"));
+        $commentedBinding = Helper\trim_if_string($this->execSsh("grep '^#.*bind \\^F whereis all' /etc/nanorc"));
         if ($commentedBinding !== '') {
             // Uncomment the existing binding
             $uncommentCommand = "sed -i 's/^#\\s*\\(bind \\^F whereis all\\)/\\1/' /etc/nanorc";
-            $output           = $this->sshConnection->exec($uncommentCommand);
+            $output           = $this->execSsh($uncommentCommand);
 
             if ($output === '') {
                 $this->logger->info('The Nano "Where Is" binding was commented out and has been uncommented.');
@@ -1361,11 +1361,11 @@ EOF',
         }
 
         // Check if another key is bound to "whereis all"
-        $otherBinding = Helper\trim_if_string($this->sshConnection->exec("grep '^bind \\^[^F] whereis all' /etc/nanorc"));
+        $otherBinding = Helper\trim_if_string($this->execSsh("grep '^bind \\^[^F] whereis all' /etc/nanorc"));
         if ($otherBinding !== '') {
             // Update the binding to Ctrl+F
             $updateCommand = "sed -i 's/^bind \\^[^F] whereis all/bind \\^F whereis all/' /etc/nanorc";
-            $output        = $this->sshConnection->exec($updateCommand);
+            $output        = $this->execSsh($updateCommand);
 
             if ($output === '') {
                 $this->logger->info('The Nano "Where Is" binding was updated to use Ctrl+F.');
@@ -1380,7 +1380,7 @@ EOF',
 
         // If no binding exists, append the new binding
         $appendCommand = "echo 'bind ^F whereis all' >> /etc/nanorc";
-        $output        = $this->sshConnection->exec($appendCommand);
+        $output        = $this->execSsh($appendCommand);
 
         if ($output === '') {
             $this->logger->info('The Nano "Where Is" binding was added with Ctrl+F.');
@@ -1417,7 +1417,7 @@ EOF',
         );
 
         // Execute the SQL command via SSH
-        $output = $this->sshConnection->exec($sqlCommand);
+        $output = $this->execSsh($sqlCommand);
 
         // Check if the command was successful
         if ($output !== '') {
@@ -1451,7 +1451,7 @@ EOF',
 
         // Use grep to check if the replacement line already exists
         $grepCommand           = 'grep -q ' . Helper\escapeshellarg_linux($openBasedirReplacement) . " $filePath && echo 'exists'";
-        $replacementLineExists = Helper\trim_if_string($this->sshConnection->exec($grepCommand));
+        $replacementLineExists = Helper\trim_if_string($this->execSsh($grepCommand));
 
         // If the replacement line is already present, no changes are needed
         if ($replacementLineExists === 'exists') {
@@ -1462,23 +1462,23 @@ EOF',
 
         // Else check if the original line exists
         $grepCommand        = 'grep -q ' . Helper\escapeshellarg_linux($openBasedirOriginal) . " $filePath && echo 'exists'";
-        $originalLineExists = Helper\trim_if_string($this->sshConnection->exec($grepCommand));
+        $originalLineExists = Helper\trim_if_string($this->execSsh($grepCommand));
 
         // If the original line is present, back up the file and replace the line
         if ($originalLineExists === 'exists') {
             $this->logger->info("Creating backup of vhost.py at: $backupPath");
-            $this->sshConnection->exec("cp $filePath $backupPath");
+            $this->execSsh("cp $filePath $backupPath");
 
             // Use sed to replace the original line with the replacement line
             $sedOriginal    = Helper\escape_single_quotes_for_sed($openBasedirOriginal);
             $sedReplacement = Helper\escape_single_quotes_for_sed($openBasedirReplacement);
             $sedCommand     = "sed -i 's#{$sedOriginal}#{$sedReplacement}#' $filePath";
             $this->logger->info("Executing sed command: $sedCommand");
-            $this->sshConnection->exec($sedCommand);
+            $this->execSsh($sedCommand);
 
             // Use grep to verify the replacement
             $grepCommand       = 'grep -q ' . Helper\escapeshellarg_linux($openBasedirReplacement) . " $filePath && echo 'updated'";
-            $verificationCheck = Helper\trim_if_string($this->sshConnection->exec($grepCommand));
+            $verificationCheck = Helper\trim_if_string($this->execSsh($grepCommand));
 
             if ($verificationCheck === 'updated') {
                 $this->logger->info('vhost.py updated successfully.');
@@ -1533,7 +1533,7 @@ EOF',
         // Check if the replacement has already been made
         // -P is for Perl regex, -z is for multi-line, -q is for quiet mode
         $grepReplacementCheck = 'grep -Pzq ' . Helper\escapeshellarg_linux($replacementPattern) . " $filePath && echo 'exists'";
-        $replacementCheck     = Helper\trim_if_string($this->sshConnection->exec($grepReplacementCheck));
+        $replacementCheck     = Helper\trim_if_string($this->execSsh($grepReplacementCheck));
 
         if ($replacementCheck === 'exists') {
             // Replacement already exists
@@ -1544,13 +1544,13 @@ EOF',
 
         // Check if the original block is present using regex with sed
         $grepOriginalCheck = 'grep -Pzq ' . Helper\escapeshellarg_linux($originalPattern) . " $filePath && echo 'exists'";
-        $originalCheck     = Helper\trim_if_string($this->sshConnection->exec($grepOriginalCheck));
+        $originalCheck     = Helper\trim_if_string($this->execSsh($grepOriginalCheck));
 
         if ($originalCheck === 'exists') {
             // Back up the original file
             $this->logger->info("Creating backup of $filePath at: $backupPath");
             $backupCommand = "cp $filePath $backupPath";
-            $this->sshConnection->exec($backupCommand);
+            $this->execSsh($backupCommand);
 
             // Replace the block using sed with regex support
             $sedOriginal    = Helper\escape_single_quotes_for_sed($originalPattern);
@@ -1558,7 +1558,7 @@ EOF',
             // Use -z to handle multi-line replacement
             $sedCommand = "sed -i -z 's#{$sedOriginal}#{$sedReplacement}#' $filePath";
             // Use Helper\trim_if_string(), as trim(false) gives an empty string instead of a Boolean false
-            $sedResult = Helper\trim_if_string($this->sshConnection->exec($sedCommand));
+            $sedResult = Helper\trim_if_string($this->execSsh($sedCommand));
 
             if ($sedResult === false) {
                 $this->logger->error('Failed to modify vhostConfs.py.');
@@ -1568,7 +1568,7 @@ EOF',
 
             // Verify the replacement
             $verifyCommand = 'grep -Pzq ' . Helper\escapeshellarg_linux($replacementPattern) . " $filePath && echo 'updated'";
-            $verifyResult  = Helper\trim_if_string($this->sshConnection->exec($verifyCommand));
+            $verifyResult  = Helper\trim_if_string($this->execSsh($verifyCommand));
 
             if ($verifyResult === 'updated') {
                 $this->logger->info('vhostConfs.py updated successfully.');
@@ -1630,7 +1630,7 @@ EOF',
 
         foreach ($entries as $entry => $filePath) {
             // Check if the file already exists
-            $fileExists = $this->sshConnection->exec("[ -f $filePath ] && echo 'exists'");
+            $fileExists = $this->execSsh("[ -f $filePath ] && echo 'exists'");
 
             if (Helper\trim_if_string($fileExists) === 'exists') {
                 $this->logger->info("File $filePath already exists. Skipping.");
@@ -1640,7 +1640,7 @@ EOF',
 
             // Create the alias/function file
             $command = "echo '$entry' > $filePath && echo 'created'";
-            $result  = $this->sshConnection->exec($command);
+            $result  = $this->execSsh($command);
 
             if (Helper\trim_if_string($result) === 'created') {
                 $this->logger->info("Successfully created $filePath.");
@@ -1673,7 +1673,7 @@ EOF',
 
         // Backup the original file
         $this->logger->info("Backing up $filePath to $backupPath");
-        $this->sshConnection->exec("cp $filePath $backupPath");
+        $this->execSsh("cp $filePath $backupPath");
 
         // Define the configurations to be added/updated
         $configurations = [
@@ -1685,23 +1685,23 @@ EOF',
         foreach ($configurations as $pattern) {
             // Check if the exact line already exists
             $grepPattern = "grep -q '^{$pattern}$' {$filePath} && echo 'exists'";
-            $grepCheck   = Helper\trim_if_string($this->sshConnection->exec($grepPattern));
+            $grepCheck   = Helper\trim_if_string($this->execSsh($grepPattern));
             if ($grepCheck !== 'exists') {
                 // Check if the commented version exists
                 $grepCommentedPattern = "grep -q '^#{$pattern}$' {$filePath} && echo 'exists'";
-                if (Helper\trim_if_string($this->sshConnection->exec($grepCommentedPattern)) === 'exists') {
+                if (Helper\trim_if_string($this->execSsh($grepCommentedPattern)) === 'exists') {
                     // Replace the commented version with uncommented
                     $sedCommand = "sed -i 's/^#{$pattern}$/{$pattern}/' {$filePath}";
                     $this->logger->info("Replacing commented version of {$pattern} with uncommented");
-                    $this->sshConnection->exec($sedCommand);
+                    $this->execSsh($sedCommand);
                 } else {
                     // Append new line
                     $this->logger->info("Appending new line: {$pattern}");
-                    $this->sshConnection->exec("echo '{$pattern}' >> {$filePath}");
+                    $this->execSsh("echo '{$pattern}' >> {$filePath}");
                 }
 
                 // Verify the change
-                $verificationCheck = Helper\trim_if_string($this->sshConnection->exec($grepPattern));
+                $verificationCheck = Helper\trim_if_string($this->execSsh($grepPattern));
                 if ($verificationCheck !== 'exists') {
                     $this->logger->error("Failed to configure {$pattern} in screenrc");
                     $success = false;
@@ -2143,5 +2143,233 @@ EOF',
         }
 
         return $success;
+    }
+
+    /**
+     * Installs LiteSpeed PHP versions and extensions.
+     *
+     * This method:
+     * - Optionally updates apt packages
+     * - Validates requested PHP versions
+     * - Installs specified LiteSpeed PHP versions and their extensions
+     *
+     * @param bool       $updateApt Whether to run apt-get update before installation
+     * @param int        $timeout   SSH timeout in seconds (default: 1800 = 30 minutes)
+     * @param array|null $versions  Array of PHP versions to install (e.g., ['7.4', '8.3'])
+     *                              If null, installs all supported versions
+     *
+     * @throws \InvalidArgumentException If an invalid PHP version is provided
+     * @throws \Exception                If SSH connection fails or commands cannot be executed
+     *
+     * @return bool Returns true if all operations were successful, false otherwise
+     */
+    public function installLiteSpeedPhpVersionsAndExtensions(bool $updateApt = true, int $timeout = 1800, ?array $versions = null): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        try {
+            // Store and set timeout
+            $originalTimeout = $this->sshConnection->getTimeout();
+            $this->sshConnection->setTimeout($timeout);
+
+            // Define supported PHP versions and their extensions
+            $supportedVersions = [
+                '7.4' => [
+                    '', // Empty string for base package
+                    'apcu',
+                    'common',
+                    'curl',
+                    'dbg',
+                    'dev',
+                    'igbinary',
+                    'imagick',
+                    'imap',
+                    'intl',
+                    'ioncube',
+                    'json',
+                    'ldap',
+                    'memcached',
+                    'modules-source',
+                    'msgpack',
+                    'mysql',
+                    'opcache',
+                    'pear',
+                    'pgsql',
+                    'pspell',
+                    'redis',
+                    'snmp',
+                    'sqlite3',
+                    'sybase',
+                    'tidy',
+                ],
+                '8.0' => [
+                    '',
+                    'apcu',
+                    'common',
+                    'curl',
+                    'dbg',
+                    'dev',
+                    'igbinary',
+                    'imagick',
+                    'imap',
+                    'intl',
+                    'ldap',
+                    'memcached',
+                    'modules-source',
+                    'msgpack',
+                    'mysql',
+                    'opcache',
+                    'pear',
+                    'pgsql',
+                    'pspell',
+                    'redis',
+                    'snmp',
+                    'sqlite3',
+                    'sybase',
+                    'tidy',
+                ],
+                '8.1' => [
+                    '',
+                    'apcu',
+                    'common',
+                    'curl',
+                    'dbg',
+                    'dev',
+                    'igbinary',
+                    'imagick',
+                    'imap',
+                    'intl',
+                    'ioncube',
+                    'ldap',
+                    'memcached',
+                    'modules-source',
+                    'msgpack',
+                    'mysql',
+                    'opcache',
+                    'pear',
+                    'pgsql',
+                    'pspell',
+                    'redis',
+                    'snmp',
+                    'sqlite3',
+                    'sybase',
+                    'tidy',
+                ],
+                '8.2' => [
+                    '',
+                    'apcu',
+                    'common',
+                    'curl',
+                    'dbg',
+                    'dev',
+                    'igbinary',
+                    'imagick',
+                    'imap',
+                    'intl',
+                    'ioncube',
+                    'ldap',
+                    'memcached',
+                    'modules-source',
+                    'msgpack',
+                    'mysql',
+                    'opcache',
+                    'pear',
+                    'pgsql',
+                    'pspell',
+                    'redis',
+                    'snmp',
+                    'sqlite3',
+                    'sybase',
+                    'tidy',
+                ],
+                '8.3' => [
+                    '',
+                    'apcu',
+                    'common',
+                    'curl',
+                    'dbg',
+                    'dev',
+                    'igbinary',
+                    'imagick',
+                    'imap',
+                    'intl',
+                    'ioncube',
+                    'ldap',
+                    'memcached',
+                    'modules-source',
+                    'msgpack',
+                    'mysql',
+                    'opcache',
+                    'pear',
+                    'pgsql',
+                    'pspell',
+                    'redis',
+                    'snmp',
+                    'sqlite3',
+                    'sybase',
+                    'tidy',
+                ],
+            ];
+
+            // If no versions specified, install all supported versions
+            $versions = $versions ?? array_keys($supportedVersions);
+
+            // Validate requested versions
+            foreach ($versions as $version) {
+                if (!isset($supportedVersions[$version])) {
+                    throw new \InvalidArgumentException("Invalid PHP version: $version");
+                }
+            }
+
+            // Update package lists if requested
+            if ($updateApt) {
+                $this->logger->info('Updating package lists...');
+                if (!$this->executeCommand('apt-get update')) {
+                    return false;
+                }
+            }
+
+            // Build installation command for each version
+            foreach ($versions as $version) {
+                $shortVersion = str_replace('.', '', $version);
+                $this->logger->info("Installing LiteSpeed PHP $version and extensions...");
+
+                // Build package list for this version
+                $packages = [];
+                foreach ($supportedVersions[$version] as $extension) {
+                    $packageName = "lsphp{$shortVersion}" . ($extension ? "-{$extension}" : '');
+                    $packages[]  = $packageName;
+                }
+
+                // Create installation command
+                $installCommand = 'apt-get install -y ' . implode(' ', $packages);
+
+                // Execute installation
+                if (!$this->executeCommand($installCommand)) {
+                    $this->logger->error("Failed to install LiteSpeed PHP $version packages");
+
+                    return false;
+                }
+
+                $this->logger->info("Successfully installed LiteSpeed PHP $version and extensions");
+            }
+
+            $this->logger->info('LiteSpeed PHP installation completed successfully');
+
+            return true;
+        } catch (\InvalidArgumentException $e) {
+            // Rethrow InvalidArgumentException
+            throw $e;
+        } catch (\Exception $e) {
+            $this->logger->error('Error during LiteSpeed PHP installation: ' . $e->getMessage());
+
+            return false;
+        } finally {
+            // Restore original timeout
+            if (isset($originalTimeout)) {
+                $this->sshConnection->setTimeout($originalTimeout);
+            }
+        }
     }
 }
