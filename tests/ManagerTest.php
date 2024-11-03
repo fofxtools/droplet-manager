@@ -3599,77 +3599,6 @@ class ManagerTest extends TestCase
         $this->assertEquals(60, $timeoutSequence[1], 'Original timeout not restored');
     }
 
-    public function testConfigurePhpSuccess(): void
-    {
-        $this->sshMock->method('login')->willReturn(true);
-        $this->manager->setSshConnection($this->sshMock);
-
-        // For 5 PHP versions (7.4, 8.0, 8.1, 8.2, 8.3), we expect:
-        // - 2 calls per version for symlink creation (10 total)
-        // - 5 calls per version for display_errors modification (25 total)
-        $this->sshMock->expects($this->exactly(35))
-            ->method('exec')
-            ->willReturnOnConsecutiveCalls(
-                // PHP 7.4 symlink
-                '',  // test -e check
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
-
-                // PHP 8.0 symlink
-                '',  // test -e check
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
-
-                // PHP 8.1 symlink
-                '',  // test -e check
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
-
-                // PHP 8.2 symlink
-                '',  // test -e check
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
-
-                // PHP 8.3 symlink
-                '',  // test -e check
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
-
-                // PHP 7.4 display_errors
-                '',  // grep On check
-                'display_errors = Off', // grep Off check
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
-                'display_errors = On',  // grep verify
-
-                // PHP 8.0 display_errors
-                '',  // grep On check
-                'display_errors = Off', // grep Off check
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
-                'display_errors = On',  // grep verify
-
-                // PHP 8.1 display_errors
-                '',  // grep On check
-                'display_errors = Off', // grep Off check
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
-                'display_errors = On',  // grep verify
-
-                // PHP 8.2 display_errors
-                '',  // grep On check
-                'display_errors = Off', // grep Off check
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
-                'display_errors = On',  // grep verify
-
-                // PHP 8.3 display_errors
-                '',  // grep On check
-                'display_errors = Off', // grep Off check
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
-                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
-                'display_errors = On'   // grep verify
-            );
-
-        $result = $this->manager->configurePhp(true);
-        $this->assertTrue($result);
-    }
-
     /**
      * Test successful installation of LiteSpeed PHP versions and extensions.
      */
@@ -3796,6 +3725,256 @@ class ManagerTest extends TestCase
             );
 
         $result = $this->manager->installLiteSpeedPhpVersionsAndExtensions(true, 1800, ['7.4']);
+        $this->assertFalse($result);
+    }
+
+    public function testConfigurePhpSuccess(): void
+    {
+        $this->sshMock->method('login')->willReturn(true);
+        $this->manager->setSshConnection($this->sshMock);
+
+        // For 5 PHP versions (7.4, 8.0, 8.1, 8.2, 8.3), we expect:
+        // - 2 calls per version for symlink creation (10 total)
+        // - 5 calls per version for display_errors modification (25 total)
+        $this->sshMock->expects($this->exactly(35))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                // PHP 7.4 symlink
+                '',  // test -e check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
+
+                // PHP 8.0 symlink
+                '',  // test -e check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
+
+                // PHP 8.1 symlink
+                '',  // test -e check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
+
+                // PHP 8.2 symlink
+                '',  // test -e check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
+
+                // PHP 8.3 symlink
+                '',  // test -e check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
+
+                // PHP 7.4 display_errors
+                '',  // grep On check
+                'display_errors = Off', // grep Off check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
+                'display_errors = On',  // grep verify
+
+                // PHP 8.0 display_errors
+                '',  // grep On check
+                'display_errors = Off', // grep Off check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
+                'display_errors = On',  // grep verify
+
+                // PHP 8.1 display_errors
+                '',  // grep On check
+                'display_errors = Off', // grep Off check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
+                'display_errors = On',  // grep verify
+
+                // PHP 8.2 display_errors
+                '',  // grep On check
+                'display_errors = Off', // grep Off check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
+                'display_errors = On',  // grep verify
+
+                // PHP 8.3 display_errors
+                '',  // grep On check
+                'display_errors = Off', // grep Off check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
+                'display_errors = On'   // grep verify
+            );
+
+        $result = $this->manager->configurePhp(true);
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test PHP configuration when symlink creation fails.
+     */
+    public function testConfigurePhpSymlinkFailure(): void
+    {
+        $this->sshMock->method('login')->willReturn(true);
+        $this->manager->setSshConnection($this->sshMock);
+
+        // Simulate symlink creation failure
+        $this->sshMock->expects($this->exactly(10))  // 2 calls per version (test -e and ln -s)
+            ->method('exec')
+            ->willReturnCallback(function ($command) {
+                if (str_contains($command, 'test -e')) {
+                    return '';  // File doesn't exist
+                }
+
+                return 'Command failed<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>';  // ln -s fails
+            });
+
+        // Expect error messages for each version
+        $expectedErrors = [
+            'Command failed with exit code 1: ln -s',
+            'Failed to create symlink for PHP 7.4',
+            'Command failed with exit code 1: ln -s',
+            'Failed to create symlink for PHP 8.0',
+            'Command failed with exit code 1: ln -s',
+            'Failed to create symlink for PHP 8.1',
+            'Command failed with exit code 1: ln -s',
+            'Failed to create symlink for PHP 8.2',
+            'Command failed with exit code 1: ln -s',
+            'Failed to create symlink for PHP 8.3',
+        ];
+
+        $errorIndex = 0;
+        $this->mockLogger->expects($this->exactly(10))
+            ->method('error')
+            ->willReturnCallback(function ($message) use (&$errorIndex, $expectedErrors) {
+                $this->assertStringContainsString($expectedErrors[$errorIndex], $message);
+                $errorIndex++;
+            });
+
+        $result = $this->manager->configurePhp(false);
+        $this->assertFalse($result);
+    }
+
+    /**
+     * Test MySQL configuration when all steps succeed.
+     */
+    public function testConfigureMySqlSuccess(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+
+        // We expect 9 SSH commands to be executed:
+        // 1. Backup file
+        // 2. Check for [mysqld] section
+        // 3. Check for skip-networking
+        // 4. Add skip-networking=0
+        // 5. Verify skip-networking=0
+        // 6. Check for skip-bind-address
+        // 7. Add skip-bind-address
+        // 8. Verify skip-bind-address
+        // 9. MySQL service restart
+        // 10. MySQL service status check
+        $this->sshMock->expects($this->exactly(10))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                // Backup successful
+                '',
+                // [mysqld] section exists
+                'exists',
+                // skip-networking check
+                '',
+                // Add skip-networking=0 successful
+                '',
+                // Verify skip-networking=0
+                'exists',
+                // skip-bind-address check
+                '',
+                // Add skip-bind-address successful
+                '',
+                // Verify skip-bind-address
+                'exists',
+                // MySQL restart successful
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>',
+                // MySQL status check successful
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>'
+            );
+
+        $result = $this->manager->configureMySql();
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test MySQL configuration when service restart fails.
+     */
+    public function testConfigureMySqlServiceRestartFailure(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+
+        // All configuration steps succeed but service restart fails
+        $this->sshMock->expects($this->exactly(9))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                // Backup successful
+                '',
+                // [mysqld] section exists
+                'exists',
+                // skip-networking check
+                '',
+                // Add skip-networking=0 successful
+                '',
+                // Verify skip-networking=0
+                'exists',
+                // skip-bind-address check
+                '',
+                // Add skip-bind-address successful
+                '',
+                // Verify skip-bind-address
+                'exists',
+                // MySQL restart fails
+                'Failed to restart MySQL<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>'
+            );
+
+        // Expect two error logs
+        $this->mockLogger->expects($this->exactly(2))
+            ->method('error')
+            ->willReturnCallback(function ($message, $context = []) {
+                static $callCount = 0;
+                $callCount++;
+
+                if ($callCount === 1) {
+                    // First error from executeCommand()
+                    $this->assertStringContainsString('Command failed with exit code 1: service mysql restart', $message);
+                    $this->assertArrayHasKey('output', $context);
+                } else {
+                    // Second error from configureMySql()
+                    $this->assertEquals('Failed to restart MySQL service', $message);
+                }
+            });
+
+        $result = $this->manager->configureMySql();
+        $this->assertFalse($result);
+    }
+
+    /**
+     * Test MySQL configuration when verification fails.
+     */
+    public function testConfigureMySqlVerificationFailure(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Configuration succeeds but verification fails
+        $this->sshMock->expects($this->exactly(5))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                // Backup successful
+                '',
+                // [mysqld] section exists
+                'exists',
+                // skip-networking check
+                '',
+                // Add skip-networking=0 successful
+                '',
+                // Verify skip-networking=0 fails
+                ''  // Empty response means verification failed
+            );
+
+        // Expect error to be logged
+        $this->mockLogger->expects($this->once())
+            ->method('error')
+            ->with($this->stringContains('Failed to configure skip-networking'));
+
+        $result = $this->manager->configureMySql();
         $this->assertFalse($result);
     }
 }

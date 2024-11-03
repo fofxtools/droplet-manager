@@ -2031,121 +2031,6 @@ EOF',
     }
 
     /**
-     * Configures PHP by creating symlinks and optionally enabling display errors.
-     *
-     * This method:
-     * 1. Creates symlinks for PHP versions 7.4 to 8.3
-     * 2. Optionally enables display_errors in php.ini for each version
-     *
-     * @param bool $enableDisplayErrors Whether to enable display_errors in php.ini
-     *
-     * @return bool Returns true if all operations were successful, false otherwise
-     */
-    public function configurePhp(bool $enableDisplayErrors = false): bool
-    {
-        // Ensure SSH connection is established
-        $this->verifyConnectionSsh();
-
-        $success = true;
-
-        // Define PHP versions and their paths
-        $phpVersions = [
-            '74' => '7.4',
-            '80' => '8.0',
-            '81' => '8.1',
-            '82' => '8.2',
-            '83' => '8.3',
-        ];
-
-        // Create symlinks for each PHP version
-        foreach ($phpVersions as $shortVersion => $fullVersion) {
-            $sourcePath = "/usr/local/lsws/lsphp{$shortVersion}/bin/php";
-            $targetPath = "/usr/bin/php{$fullVersion}";
-
-            // Check if symlink or file already exists
-            $checkCommand  = "test -e {$targetPath} && echo 'exists'";
-            $symlinkExists = Helper\trim_if_string($this->execSsh($checkCommand, 'configurePhp'));
-
-            if ($symlinkExists === 'exists') {
-                $this->logger->info("Symlink for PHP {$fullVersion} already exists");
-
-                continue;
-            }
-
-            // Create symlink
-            if (!$this->executeCommand("ln -s {$sourcePath} {$targetPath}")) {
-                $this->logger->error("Failed to create symlink for PHP {$fullVersion}");
-                $success = false;
-
-                continue;
-            }
-
-            $this->logger->info("Created symlink for PHP {$fullVersion}");
-        }
-
-        // Enable display errors if requested
-        if ($enableDisplayErrors) {
-            foreach ($phpVersions as $shortVersion => $fullVersion) {
-                $phpIniPath = "/usr/local/lsws/lsphp{$shortVersion}/etc/php/{$fullVersion}/litespeed/php.ini";
-                $this->logger->info("Checking display errors for PHP {$fullVersion} at {$phpIniPath}");
-
-                // Check if display_errors is already On
-                $grepOnCommand   = "grep -i '^display_errors[[:space:]]*=[[:space:]]*On' {$phpIniPath}";
-                $displayErrorsOn = Helper\trim_if_string($this->execSsh($grepOnCommand, 'configurePhp'));
-
-                if (!empty($displayErrorsOn)) {
-                    $this->logger->info("Display errors already enabled for PHP {$fullVersion}");
-
-                    continue;
-                }
-
-                // Check if display_errors = Off exists
-                $grepOffCommand   = "grep -i '^display_errors[[:space:]]*=[[:space:]]*Off' {$phpIniPath}";
-                $displayErrorsOff = Helper\trim_if_string($this->execSsh($grepOffCommand, 'configurePhp'));
-
-                if (empty($displayErrorsOff)) {
-                    $this->logger->error("Could not find display_errors = Off line in {$phpIniPath}. Skipping enabling display errors for PHP {$fullVersion}.");
-                    $success = false;
-
-                    continue;
-                }
-
-                // Create backup of php.ini
-                $backupPath = $phpIniPath . '.bak_' . date('Ymd_His');
-                $this->logger->info("Creating backup of {$phpIniPath} at {$backupPath}");
-                if (!$this->executeCommand("cp {$phpIniPath} {$backupPath}")) {
-                    $this->logger->error("Failed to create backup of php.ini for PHP {$fullVersion}");
-                    $success = false;
-
-                    continue;
-                }
-
-                // Replace display_errors = Off with display_errors = On
-                $sedCommand = "sed -i 's/^display_errors[[:space:]]*=[[:space:]]*Off/display_errors = On/I' {$phpIniPath}";
-                if (!$this->executeCommand($sedCommand)) {
-                    $this->logger->error("Failed to enable display errors for PHP {$fullVersion}");
-                    $success = false;
-
-                    continue;
-                }
-
-                // Verify the change
-                $verifyCommand = "grep -i '^display_errors[[:space:]]*=[[:space:]]*On' {$phpIniPath}";
-                $verifyResult  = Helper\trim_if_string($this->execSsh($verifyCommand, 'configurePhp'));
-
-                if (empty($verifyResult)) {
-                    $this->logger->error("Failed to verify display errors setting for PHP {$fullVersion}");
-                    $success = false;
-                } else {
-                    $this->logger->info("Successfully enabled display errors for PHP {$fullVersion}");
-                }
-            }
-        }
-
-        return $success;
-    }
-
-    /**
      * Installs LiteSpeed PHP versions and extensions.
      *
      * This method:
@@ -2371,5 +2256,215 @@ EOF',
                 $this->sshConnection->setTimeout($originalTimeout);
             }
         }
+    }
+
+    /**
+     * Configures PHP by creating symlinks and optionally enabling display errors.
+     *
+     * This method:
+     * 1. Creates symlinks for PHP versions 7.4 to 8.3
+     * 2. Optionally enables display_errors in php.ini for each version
+     *
+     * @param bool $enableDisplayErrors Whether to enable display_errors in php.ini
+     *
+     * @return bool Returns true if all operations were successful, false otherwise
+     */
+    public function configurePhp(bool $enableDisplayErrors = false): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        $success = true;
+
+        // Define PHP versions and their paths
+        $phpVersions = [
+            '74' => '7.4',
+            '80' => '8.0',
+            '81' => '8.1',
+            '82' => '8.2',
+            '83' => '8.3',
+        ];
+
+        // Create symlinks for each PHP version
+        foreach ($phpVersions as $shortVersion => $fullVersion) {
+            $sourcePath = "/usr/local/lsws/lsphp{$shortVersion}/bin/php";
+            $targetPath = "/usr/bin/php{$fullVersion}";
+
+            // Check if symlink or file already exists
+            $checkCommand  = "test -e {$targetPath} && echo 'exists'";
+            $symlinkExists = Helper\trim_if_string($this->execSsh($checkCommand, 'configurePhp'));
+
+            if ($symlinkExists === 'exists') {
+                $this->logger->info("Symlink for PHP {$fullVersion} already exists");
+
+                continue;
+            }
+
+            // Create symlink
+            if (!$this->executeCommand("ln -s {$sourcePath} {$targetPath}")) {
+                $this->logger->error("Failed to create symlink for PHP {$fullVersion}");
+                $success = false;
+
+                continue;
+            }
+
+            $this->logger->info("Created symlink for PHP {$fullVersion}");
+        }
+
+        // Enable display errors if requested
+        if ($enableDisplayErrors) {
+            foreach ($phpVersions as $shortVersion => $fullVersion) {
+                $phpIniPath = "/usr/local/lsws/lsphp{$shortVersion}/etc/php/{$fullVersion}/litespeed/php.ini";
+                $this->logger->info("Checking display errors for PHP {$fullVersion} at {$phpIniPath}");
+
+                // Check if display_errors is already On
+                $grepOnCommand   = "grep -i '^display_errors[[:space:]]*=[[:space:]]*On' {$phpIniPath}";
+                $displayErrorsOn = Helper\trim_if_string($this->execSsh($grepOnCommand, 'configurePhp'));
+
+                if (!empty($displayErrorsOn)) {
+                    $this->logger->info("Display errors already enabled for PHP {$fullVersion}");
+
+                    continue;
+                }
+
+                // Check if display_errors = Off exists
+                $grepOffCommand   = "grep -i '^display_errors[[:space:]]*=[[:space:]]*Off' {$phpIniPath}";
+                $displayErrorsOff = Helper\trim_if_string($this->execSsh($grepOffCommand, 'configurePhp'));
+
+                if (empty($displayErrorsOff)) {
+                    $this->logger->error("Could not find display_errors = Off line in {$phpIniPath}. Skipping enabling display errors for PHP {$fullVersion}.");
+                    $success = false;
+
+                    continue;
+                }
+
+                // Create backup of php.ini
+                $backupPath = $phpIniPath . '.bak_' . date('Ymd_His');
+                $this->logger->info("Creating backup of {$phpIniPath} at {$backupPath}");
+                if (!$this->executeCommand("cp {$phpIniPath} {$backupPath}")) {
+                    $this->logger->error("Failed to create backup of php.ini for PHP {$fullVersion}");
+                    $success = false;
+
+                    continue;
+                }
+
+                // Replace display_errors = Off with display_errors = On
+                $sedCommand = "sed -i 's/^display_errors[[:space:]]*=[[:space:]]*Off/display_errors = On/I' {$phpIniPath}";
+                if (!$this->executeCommand($sedCommand)) {
+                    $this->logger->error("Failed to enable display errors for PHP {$fullVersion}");
+                    $success = false;
+
+                    continue;
+                }
+
+                // Verify the change
+                $verifyCommand = "grep -i '^display_errors[[:space:]]*=[[:space:]]*On' {$phpIniPath}";
+                $verifyResult  = Helper\trim_if_string($this->execSsh($verifyCommand, 'configurePhp'));
+
+                if (empty($verifyResult)) {
+                    $this->logger->error("Failed to verify display errors setting for PHP {$fullVersion}");
+                    $success = false;
+                } else {
+                    $this->logger->info("Successfully enabled display errors for PHP {$fullVersion}");
+                }
+            }
+        }
+
+        return $success;
+    }
+
+    /**
+     * Configures MySQL to enable external access by modifying /etc/mysql/my.cnf.
+     *
+     * This method:
+     * - Creates a backup of the original file
+     * - Ensures [mysqld] section exists
+     * - Sets skip-networking=0
+     * - Adds skip-bind-address
+     *
+     * @return bool Returns true if all configurations were successful, false otherwise
+     */
+    public function configureMySql(): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        $filePath   = '/etc/mysql/my.cnf';
+        $backupPath = $filePath . '.bak_' . date('Ymd_His');
+
+        // Create backup
+        $this->logger->info("Creating backup of my.cnf at: $backupPath");
+        $this->execSsh("cp $filePath $backupPath");
+
+        // Check for [mysqld] section
+        $mysqldCheck = Helper\trim_if_string($this->execSsh("grep -qx '\\[mysqld\\]' $filePath && echo 'exists'"));
+        if ($mysqldCheck !== 'exists') {
+            $this->logger->info('Adding [mysqld] section');
+            $this->execSsh("echo '\n[mysqld]' >> $filePath");
+
+            // Verify addition
+            $verifyMysqld = Helper\trim_if_string($this->execSsh("grep -qx '\\[mysqld\\]' $filePath && echo 'exists'"));
+            if ($verifyMysqld !== 'exists') {
+                $this->logger->error('Failed to add [mysqld] section');
+
+                return false;
+            }
+        }
+
+        // Handle skip-networking
+        $skipNetworkingCheck = Helper\trim_if_string($this->execSsh("grep -qi '^skip-networking' $filePath && echo 'exists'"));
+        if ($skipNetworkingCheck !== 'exists') {
+            $this->logger->info('Adding skip-networking=0');
+            $this->execSsh("echo 'skip-networking=0' >> $filePath");
+        } else {
+            $skipNetworkingZeroCheck = Helper\trim_if_string($this->execSsh("grep -qi '^skip-networking=0' $filePath && echo 'exists'"));
+            if ($skipNetworkingZeroCheck !== 'exists') {
+                $this->logger->info('Updating existing skip-networking to 0');
+                // Handle all possible variations: skip-networking, skip-networking=1, skip-networking=ON, etc.
+                $this->execSsh("sed -i 's/^skip-networking.*/skip-networking=0/i' $filePath");
+            }
+        }
+
+        // Verify skip-networking
+        $verifySkipNetworking = Helper\trim_if_string($this->execSsh("grep -qi '^skip-networking=0' $filePath && echo 'exists'"));
+        if ($verifySkipNetworking !== 'exists') {
+            $this->logger->error('Failed to configure skip-networking');
+
+            return false;
+        }
+
+        // Handle skip-bind-address
+        $skipBindCheck = Helper\trim_if_string($this->execSsh("grep -qx 'skip-bind-address' $filePath && echo 'exists'"));
+        if ($skipBindCheck !== 'exists') {
+            $this->logger->info('Adding skip-bind-address');
+            $this->execSsh("echo 'skip-bind-address' >> $filePath");
+
+            // Verify addition
+            $verifySkipBind = Helper\trim_if_string($this->execSsh("grep -qx 'skip-bind-address' $filePath && echo 'exists'"));
+            if ($verifySkipBind !== 'exists') {
+                $this->logger->error('Failed to add skip-bind-address');
+
+                return false;
+            }
+        }
+
+        // After all configurations are done, restart MySQL
+        $this->logger->info('Restarting MySQL service...');
+        if (!$this->executeCommand('service mysql restart')) {
+            $this->logger->error('Failed to restart MySQL service');
+
+            return false;
+        }
+
+        // Verify MySQL is running
+        if (!$this->executeCommand('service mysql status')) {
+            $this->logger->error('MySQL service failed to start');
+
+            return false;
+        }
+
+        $this->logger->info('MySQL configuration completed successfully');
+
+        return true;
     }
 }

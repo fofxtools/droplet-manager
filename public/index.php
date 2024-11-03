@@ -9,7 +9,7 @@ $manager   = new Manager('test');
 $cyberLink = $manager->connectCyberLink();
 
 $manager->setVerbose(true);
-$manager->setDebug(true);
+//$manager->setDebug(true);
 
 //$domain = 'iffduruguay.org';
 //$domain = 'examplesite.com';
@@ -74,3 +74,5 @@ $domain = '022679.xyz';
 //var_dump($manager->configurePhp(true));
 
 //var_dump($manager->installLiteSpeedPhpVersionsAndExtensions(false));
+
+var_dump($manager->configureMySql());
