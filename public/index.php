@@ -75,4 +75,6 @@ $domain = '022679.xyz';
 
 //var_dump($manager->installLiteSpeedPhpVersionsAndExtensions(false));
 
-var_dump($manager->configureMySql());
+//var_dump($manager->configureMySql());
+
+//var_dump($manager->openFirewall());

@@ -2450,7 +2450,7 @@ EOF',
 
         // After all configurations are done, restart MySQL
         $this->logger->info('Restarting MySQL service...');
-        if (!$this->executeCommand('service mysql restart')) {
+        if (!$this->executeCommand('systemctl restart mysql')) {
             $this->logger->error('Failed to restart MySQL service');
 
             return false;
@@ -2464,6 +2464,65 @@ EOF',
         }
 
         $this->logger->info('MySQL configuration completed successfully');
+
+        return true;
+    }
+
+    /**
+     * Opens a specified port on the firewall and reloads it.
+     *
+     * This method:
+     * - Checks if the port is already open
+     * - Adds the port to the firewall if not already open
+     * - Reloads the firewall to apply changes
+     *
+     * @param int $port The port number to open (default: 3306)
+     *
+     * @return bool Returns true if the port was successfully opened or was already open,
+     *              false if the operation failed
+     */
+    public function openFirewall(int $port = 3306): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        // Check if port is already open
+        $checkCommand = "firewall-cmd --list-ports | grep '$port/tcp'";
+        $portStatus   = Helper\trim_if_string($this->execSsh($checkCommand));
+
+        if (!empty($portStatus)) {
+            $this->logger->info("Port $port is already open in the firewall");
+
+            return true;
+        }
+
+        // Add the port to the firewall permanently
+        $this->logger->info("Opening port $port in the firewall...");
+        if (!$this->executeCommand("firewall-cmd --permanent --zone=public --add-port=$port/tcp")) {
+            $this->logger->error("Failed to open port $port in the firewall");
+
+            return false;
+        }
+
+        // Reload the firewall
+        $this->logger->info('Reloading firewall...');
+        if (!$this->executeCommand('firewall-cmd --reload')) {
+            $this->logger->error('Failed to reload the firewall');
+
+            return false;
+        }
+
+        // Verify the port is now open
+        $verifyCommand = "firewall-cmd --list-ports | grep '$port/tcp'";
+        $verifyStatus  = Helper\trim_if_string($this->execSsh($verifyCommand));
+
+        if (empty($verifyStatus)) {
+            $this->logger->error("Failed to verify port $port is open in the firewall");
+
+            return false;
+        }
+
+        $this->logger->info("Successfully opened port $port in the firewall");
 
         return true;
     }

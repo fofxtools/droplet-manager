@@ -3933,7 +3933,7 @@ class ManagerTest extends TestCase
 
                 if ($callCount === 1) {
                     // First error from executeCommand()
-                    $this->assertStringContainsString('Command failed with exit code 1: service mysql restart', $message);
+                    $this->assertStringContainsString('Command failed with exit code 1: systemctl restart mysql', $message);
                     $this->assertArrayHasKey('output', $context);
                 } else {
                     // Second error from configureMySql()
@@ -3975,6 +3975,119 @@ class ManagerTest extends TestCase
             ->with($this->stringContains('Failed to configure skip-networking'));
 
         $result = $this->manager->configureMySql();
+        $this->assertFalse($result);
+    }
+
+    /**
+     * Test openFirewall when port is already open
+     */
+    public function testOpenFirewallPortAlreadyOpen(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->with("firewall-cmd --list-ports | grep '3306/tcp'")
+            ->willReturn('3306/tcp');
+
+        $result = $this->manager->openFirewall();
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test openFirewall with successful port opening
+     */
+    public function testOpenFirewallSuccess(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // Port not already open
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Add port success
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Reload success
+                '3306/tcp'  // Verification succeeds (port found in list)
+            );
+
+        $result = $this->manager->openFirewall();
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test openFirewall with custom port
+     */
+    public function testOpenFirewallCustomPort(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // Port not already open
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Add port success
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Reload success
+                '8080/tcp'  // Verification succeeds (port found in list)
+            );
+
+        $result = $this->manager->openFirewall(8080);
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test openFirewall when add-port command fails
+     */
+    public function testOpenFirewallAddPortFailure(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(2))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // Port not already open
+                'Error output<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>' // Add port failure
+            );
+
+        $result = $this->manager->openFirewall();
+        $this->assertFalse($result);
+    }
+
+    /**
+     * Test openFirewall when reload command fails
+     */
+    public function testOpenFirewallReloadFailure(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(3))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // Port not already open
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Add port success
+                'Error output<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>'    // Reload failure
+            );
+
+        $result = $this->manager->openFirewall();
+        $this->assertFalse($result);
+    }
+
+    /**
+     * Test openFirewall with verification failure
+     */
+    public function testOpenFirewallVerificationFailure(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // Port not already open
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Add port success
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Reload success
+                ''   // Verification fails (port not found in list)
+            );
+
+        $result = $this->manager->openFirewall();
         $this->assertFalse($result);
     }
 }
