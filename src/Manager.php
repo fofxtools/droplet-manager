@@ -1592,12 +1592,14 @@ EOF',
     /**
      * Sets up aliases and functions via SSH, if not already present.
      *
-     * @return void
+     * @return bool Returns true if all operations were successful, false otherwise
      */
-    public function setupAliasesAndFunctions(): void
+    public function setupAliasesAndFunctions(): bool
     {
         // Ensure SSH connection is established
         $this->verifyConnectionSsh();
+
+        $success = true;
 
         $entries = [
             // Find directories, sorted alphabetically ignoring case, remove leading ./
@@ -1646,10 +1648,13 @@ EOF',
                 $this->logger->info("Successfully created $filePath.");
             } else {
                 $this->logger->error("Failed to create $filePath. Command: $command SSH output: $result");
+                $success = false;
             }
         }
 
         $this->logger->info('Shell aliases and functions setup process completed.');
+
+        return $success;
     }
 
     /**
@@ -1854,7 +1859,6 @@ EOF',
             }
 
             // Add PHP repository and update
-            $this->logger->info('Adding PHP repository...');
             $commands = [
                 'sudo add-apt-repository -y ppa:ondrej/php',
             ];
@@ -1864,6 +1868,7 @@ EOF',
             }
 
             foreach ($commands as $command) {
+                $this->logger->info("Executing command: $command");
                 if (!$this->executeCommand($command)) {
                     return false;
                 }
@@ -2593,5 +2598,147 @@ EOF',
         $this->logger->info('WP-CLI installed successfully');
 
         return true;
+    }
+
+    /**
+     * Configures a droplet with recommended settings and installations.
+     *
+     * This method orchestrates the execution of various configuration methods to set up
+     * a droplet with optimal settings for web hosting. It includes:
+     * - Basic system configurations (aliases, screen, nano)
+     * - PHP installations and configurations
+     * - MySQL configurations
+     * - CyberPanel updates and configurations
+     * - Additional tools installation (WP-CLI)
+     *
+     * @param bool $updateApt        Whether to update apt packages
+     * @param int  $timeout          SSH timeout in seconds
+     * @param bool $phpDisplayErrors Whether to enable PHP display errors
+     * @param int  $mysqlPort        MySQL port to open in firewall
+     * @param bool $updateCyberPanel Whether to update CyberPanel
+     * @param bool $updateOs         Whether to update OS packages during CyberPanel update
+     *
+     * @throws \Exception If SSH connection fails or if critical configurations fail
+     *
+     * @return bool Returns true if all configurations were successful, false if any failed
+     */
+    public function configureDroplet(
+        bool $updateApt = true,
+        int $timeout = 3600,
+        bool $phpDisplayErrors = true,
+        int $mysqlPort = 3306,
+        bool $updateCyberPanel = true,
+        bool $updateOs = true
+    ): bool {
+        try {
+            $this->logger->info('Starting configureDroplet()...');
+
+            // Basic System Configurations
+            $this->logger->info('Configuring basic system utilities...');
+
+            if (!$this->setupAliasesAndFunctions()) {
+                $this->logger->error('Failed to set up aliases and functions');
+
+                return false;
+            }
+
+            if (!$this->configureScreen()) {
+                $this->logger->error('Failed to configure screen utility');
+
+                return false;
+            }
+
+            if (!$this->updateNanoCtrlFSearchBinding()) {
+                $this->logger->error('Failed to update nano search binding');
+
+                return false;
+            }
+
+            // PHP Installation and Configuration
+            $this->logger->info('Installing and configuring PHP...');
+
+            if (!$this->installPhpVersionsAndExtensions($updateApt, $timeout)) {
+                $this->logger->error('Failed to install PHP versions and extensions');
+
+                return false;
+            }
+
+            if (!$this->installLiteSpeedPhpVersionsAndExtensions($updateApt, $timeout)) {
+                $this->logger->error('Failed to install LiteSpeed PHP versions');
+
+                return false;
+            }
+
+            if (!$this->configurePhp($phpDisplayErrors)) {
+                $this->logger->error('Failed to configure PHP');
+
+                return false;
+            }
+
+            // MySQL Configuration
+            $this->logger->info('Configuring MySQL...');
+
+            if (!$this->configureMySql()) {
+                $this->logger->error('Failed to configure MySQL');
+
+                return false;
+            }
+
+            if (!$this->updateMyCnfPassword()) {
+                $this->logger->error('Failed to update MySQL configuration password');
+
+                return false;
+            }
+
+            if (!$this->openFirewall($mysqlPort)) {
+                $this->logger->error('Failed to open MySQL port in firewall');
+
+                return false;
+            }
+
+            // CyberPanel Configuration
+            $this->logger->info('Configuring CyberPanel...');
+
+            if ($updateCyberPanel && !$this->updateCyberPanel($updateOs, $timeout)) {
+                $this->logger->error('Failed to update CyberPanel');
+
+                return false;
+            }
+
+            if (!$this->enableCyberPanelApiAccess()) {
+                $this->logger->error('Failed to enable CyberPanel API access');
+
+                return false;
+            }
+
+            if (!$this->updateVhostPy()) {
+                $this->logger->error('Failed to update vhost.py');
+
+                return false;
+            }
+
+            if (!$this->updateVhostConfsPy()) {
+                $this->logger->error('Failed to update vhostConfs.py');
+
+                return false;
+            }
+
+            // Additional Tools
+            $this->logger->info('Installing additional tools...');
+
+            if (!$this->installWpCli()) {
+                $this->logger->error('Failed to install WP-CLI');
+
+                return false;
+            }
+
+            $this->logger->info('Droplet configuration completed successfully');
+
+            return true;
+        } catch (\Exception $e) {
+            $this->logger->error('Error during droplet configuration: ' . $e->getMessage());
+
+            throw $e;
+        }
     }
 }

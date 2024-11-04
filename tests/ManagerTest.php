@@ -2793,9 +2793,6 @@ class ManagerTest extends TestCase
         $this->manager->updateVhostConfsPy();
     }
 
-    /**
-     * Test successful creation of all aliases and functions when none exist.
-     */
     public function testSetupAliasesAndFunctionsSuccess(): void
     {
         // Configure the SSH mock to return true for login
@@ -2813,12 +2810,10 @@ class ManagerTest extends TestCase
                 return 'created';  // Creation successful
             });
 
-        $this->manager->setupAliasesAndFunctions();
+        $result = $this->manager->setupAliasesAndFunctions();
+        $this->assertTrue($result);
     }
 
-    /**
-     * Test when all alias and function files already exist.
-     */
     public function testSetupAliasesAndFunctionsAllFilesExist(): void
     {
         // Configure the SSH mock to return true for login
@@ -2829,12 +2824,10 @@ class ManagerTest extends TestCase
             ->method('exec')
             ->willReturn('exists');
 
-        $this->manager->setupAliasesAndFunctions();
+        $result = $this->manager->setupAliasesAndFunctions();
+        $this->assertTrue($result);
     }
 
-    /**
-     * Test handling of mixed scenarios where some files exist and others need to be created.
-     */
     public function testSetupAliasesAndFunctionsMixedScenario(): void
     {
         // Configure the SSH mock to return true for login
@@ -2856,19 +2849,11 @@ class ManagerTest extends TestCase
                 return 'created';
             });
 
-        $this->manager->setupAliasesAndFunctions();
-
-        // Assert that exec was called the expected number of times
-        // 12 files total:
-        // - All 12 files get checked for existence (12 checks)
-        // - Half of them (6) need to be created (6 creates)
-        // Total expected calls = 12 + 6 = 24 calls
-        $this->assertEquals(24, $execCalls, 'Unexpected number of exec calls');
+        $result = $this->manager->setupAliasesAndFunctions();
+        $this->assertTrue($result);
+        $this->assertEquals(24, $execCalls); // 12 files × 2 calls each (check + create)
     }
 
-    /**
-     * Test handling of creation failures.
-     */
     public function testSetupAliasesAndFunctionsCreationFailure(): void
     {
         // Configure the SSH mock to return true for login
@@ -2887,14 +2872,13 @@ class ManagerTest extends TestCase
                 }
                 $creationAttempts++;
 
-                return 'Permission denied';  // Creation failed
+                return false;  // Creation failed
             });
 
-        $this->manager->setupAliasesAndFunctions();
-
-        // Assert that we attempted to create files and got the expected number of calls
-        $this->assertGreaterThan(0, $creationAttempts, 'No creation attempts were made');
-        $this->assertEquals(24, $execCalls, 'Unexpected number of exec calls');
+        $result = $this->manager->setupAliasesAndFunctions();
+        $this->assertFalse($result);
+        $this->assertGreaterThan(0, $creationAttempts);
+        $this->assertEquals(24, $execCalls);
     }
 
     /**
@@ -4278,5 +4262,212 @@ class ManagerTest extends TestCase
         // Test installation
         $result = $this->manager->installWpCli();
         $this->assertFalse($result);
+    }
+
+    /**
+     * Test successful droplet configuration with all default parameters.
+     */
+    public function testConfigureDropletSuccess(): void
+    {
+        // Configure SSH mock for successful connection and commands
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('exec')
+            ->willReturn('Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>');
+
+        // Create a partial mock of Manager to mock specific methods
+        $managerMock = $this->getMockBuilder(Manager::class)
+            ->setConstructorArgs(['test-droplet', $this->mockConfig, $this->mockClient, $this->mockLogger])
+            ->onlyMethods([
+                'setupAliasesAndFunctions',
+                'configureScreen',
+                'updateNanoCtrlFSearchBinding',
+                'installPhpVersionsAndExtensions',
+                'installLiteSpeedPhpVersionsAndExtensions',
+                'configurePhp',
+                'configureMySql',
+                'updateMyCnfPassword',
+                'openFirewall',
+                'updateCyberPanel',
+                'enableCyberPanelApiAccess',
+                'updateVhostPy',
+                'updateVhostConfsPy',
+                'installWpCli',
+            ])
+            ->getMock();
+
+        // Configure all mocked methods to return true
+        $managerMock->method('setupAliasesAndFunctions')->willReturn(true);
+        $managerMock->method('configureScreen')->willReturn(true);
+        $managerMock->method('updateNanoCtrlFSearchBinding')->willReturn(true);
+        $managerMock->method('installPhpVersionsAndExtensions')->willReturn(true);
+        $managerMock->method('installLiteSpeedPhpVersionsAndExtensions')->willReturn(true);
+        $managerMock->method('configurePhp')->willReturn(true);
+        $managerMock->method('configureMySql')->willReturn(true);
+        $managerMock->method('updateMyCnfPassword')->willReturn(true);
+        $managerMock->method('openFirewall')->willReturn(true);
+        $managerMock->method('updateCyberPanel')->willReturn(true);
+        $managerMock->method('enableCyberPanelApiAccess')->willReturn(true);
+        $managerMock->method('updateVhostPy')->willReturn(true);
+        $managerMock->method('updateVhostConfsPy')->willReturn(true);
+        $managerMock->method('installWpCli')->willReturn(true);
+
+        // Inject the SSH mock
+        $managerMock->setSshConnection($this->sshMock);
+
+        // Call configureDroplet with default parameters
+        $result = $managerMock->configureDroplet();
+
+        // Assert that the configuration was successful
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test droplet configuration when SSH connection fails.
+     */
+    public function testConfigureDropletSshConnectionFailure(): void
+    {
+        // Configure SSH mock to fail login
+        $this->sshMock->method('login')->willReturn(false);
+
+        // Create manager mock with minimal configuration
+        $managerMock = $this->getMockBuilder(Manager::class)
+            ->setConstructorArgs(['test-droplet', $this->mockConfig, $this->mockClient, $this->mockLogger])
+            ->onlyMethods(['verifyConnectionSsh'])
+            ->getMock();
+
+        // Configure verifyConnectionSsh to throw exception
+        $managerMock->method('verifyConnectionSsh')
+            ->willThrowException(new \Exception('Login failed.'));
+
+        // Expect exception to be thrown
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Login failed.');
+
+        $managerMock->configureDroplet();
+    }
+
+    /**
+     * Test droplet configuration when PHP installation fails.
+     */
+    public function testConfigureDropletPhpInstallationFailure(): void
+    {
+        // Configure SSH mock for successful connection
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('exec')
+            ->willReturn('Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>');
+
+        // Create a partial mock of Manager
+        $managerMock = $this->getMockBuilder(Manager::class)
+            ->setConstructorArgs(['test-droplet', $this->mockConfig, $this->mockClient, $this->mockLogger])
+            ->onlyMethods([
+                'setupAliasesAndFunctions',
+                'configureScreen',
+                'updateNanoCtrlFSearchBinding',
+                'installPhpVersionsAndExtensions',
+                'installLiteSpeedPhpVersionsAndExtensions',
+                'configurePhp',
+                'configureMySql',
+                'updateMyCnfPassword',
+                'openFirewall',
+                'updateCyberPanel',
+                'enableCyberPanelApiAccess',
+                'updateVhostPy',
+                'updateVhostConfsPy',
+                'installWpCli',
+            ])
+            ->getMock();
+
+        // Configure methods to return true except for PHP installation
+        $managerMock->method('setupAliasesAndFunctions')->willReturn(true);
+        $managerMock->method('configureScreen')->willReturn(true);
+        $managerMock->method('updateNanoCtrlFSearchBinding')->willReturn(true);
+        $managerMock->method('installPhpVersionsAndExtensions')->willReturn(false); // Simulate failure
+
+        // Expect error to be logged
+        $this->mockLogger->expects($this->once())
+            ->method('error')
+            ->with('Failed to install PHP versions and extensions');
+
+        // Inject the SSH mock
+        $managerMock->setSshConnection($this->sshMock);
+
+        // Test configuration
+        $result = $managerMock->configureDroplet();
+        $this->assertFalse($result);
+    }
+
+    /**
+     * Test droplet configuration with custom parameters.
+     */
+    public function testConfigureDropletCustomParameters(): void
+    {
+        // Configure SSH mock for successful connection
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('exec')
+            ->willReturn('Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>');
+
+        // Create a partial mock of Manager
+        $managerMock = $this->getMockBuilder(Manager::class)
+            ->setConstructorArgs(['test-droplet', $this->mockConfig, $this->mockClient, $this->mockLogger])
+            ->onlyMethods([
+                'setupAliasesAndFunctions',
+                'configureScreen',
+                'updateNanoCtrlFSearchBinding',
+                'installPhpVersionsAndExtensions',
+                'installLiteSpeedPhpVersionsAndExtensions',
+                'configurePhp',
+                'configureMySql',
+                'updateMyCnfPassword',
+                'openFirewall',
+                'updateCyberPanel',
+                'enableCyberPanelApiAccess',
+                'updateVhostPy',
+                'updateVhostConfsPy',
+                'installWpCli',
+            ])
+            ->getMock();
+
+        // Configure all methods to return true
+        $managerMock->method('setupAliasesAndFunctions')->willReturn(true);
+        $managerMock->method('configureScreen')->willReturn(true);
+        $managerMock->method('updateNanoCtrlFSearchBinding')->willReturn(true);
+        $managerMock->method('installPhpVersionsAndExtensions')->willReturn(true);
+        $managerMock->method('installLiteSpeedPhpVersionsAndExtensions')->willReturn(true);
+        $managerMock->method('configurePhp')->willReturn(true);
+        $managerMock->method('configureMySql')->willReturn(true);
+        $managerMock->method('updateMyCnfPassword')->willReturn(true);
+        $managerMock->method('openFirewall')->willReturn(true);
+        $managerMock->method('updateCyberPanel')->willReturn(true);
+        $managerMock->method('enableCyberPanelApiAccess')->willReturn(true);
+        $managerMock->method('updateVhostPy')->willReturn(true);
+        $managerMock->method('updateVhostConfsPy')->willReturn(true);
+        $managerMock->method('installWpCli')->willReturn(true);
+
+        // Verify that openFirewall is called with custom port
+        $managerMock->expects($this->once())
+            ->method('openFirewall')
+            ->with(8080)
+            ->willReturn(true);
+
+        // Verify that configurePhp is called with display_errors disabled
+        $managerMock->expects($this->once())
+            ->method('configurePhp')
+            ->with(false)
+            ->willReturn(true);
+
+        // Inject the SSH mock
+        $managerMock->setSshConnection($this->sshMock);
+
+        // Test configuration with custom parameters
+        $result = $managerMock->configureDroplet(
+            updateApt: true,
+            timeout: 7200,
+            phpDisplayErrors: false,
+            mysqlPort: 8080,
+            updateCyberPanel: false,
+            updateOs: false
+        );
+
+        $this->assertTrue($result);
     }
 }

@@ -8,7 +8,7 @@ use FOfX\Helper;
 $manager   = new Manager('test');
 $cyberLink = $manager->connectCyberLink();
 
-$manager->setVerbose(true);
+//$manager->setVerbose(true);
 //$manager->setDebug(true);
 
 //$domain = 'iffduruguay.org';
@@ -80,3 +80,5 @@ $domain = '022679.xyz';
 //var_dump($manager->openFirewall());
 
 //var_dump($manager->installWpCli());
+
+//var_dump($manager->configureDroplet(false, 3600, true, 3306, false, false));
