@@ -4090,4 +4090,193 @@ class ManagerTest extends TestCase
         $result = $this->manager->openFirewall();
         $this->assertFalse($result);
     }
+
+    /**
+     * Test WP-CLI installation when it's already installed.
+     */
+    public function testInstallWpCliAlreadyInstalled(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->with("wp --info 2>/dev/null | grep -q 'WP-CLI version' && echo 'exists'")
+            ->willReturn('exists');
+
+        // Test installation
+        $result = $this->manager->installWpCli();
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test successful WP-CLI installation.
+     */
+    public function testInstallWpCliSuccess(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(5))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // WP-CLI not installed check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Download
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Make executable
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Move to system dir
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>'  // Verify installation
+            );
+
+        // Test installation
+        $result = $this->manager->installWpCli();
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test WP-CLI installation failure during download.
+     */
+    public function testInstallWpCliDownloadFailure(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(2))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // WP-CLI not installed check
+                'Download failed<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>' // Download fails
+            );
+
+        // Expect two error logs
+        $this->mockLogger->expects($this->exactly(2))
+            ->method('error')
+            ->willReturnCallback(function ($message, $context = []) {
+                static $callCount = 0;
+                $callCount++;
+
+                if ($callCount === 1) {
+                    // First error from executeCommand()
+                    $this->assertStringContainsString('Command failed with exit code 1: curl -o /tmp/wp-cli.phar', $message);
+                    $this->assertArrayHasKey('output', $context);
+                } else {
+                    // Second error from installWpCli()
+                    $this->assertEquals('Failed to download WP-CLI', $message);
+                }
+            });
+
+        // Test installation
+        $result = $this->manager->installWpCli();
+        $this->assertFalse($result);
+    }
+
+    /**
+     * Test WP-CLI installation failure when making executable.
+     */
+    public function testInstallWpCliChmodFailure(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(3))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // WP-CLI not installed check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Download succeeds
+                'Chmod failed<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>'    // Chmod fails
+            );
+
+        // Expect two error logs
+        $this->mockLogger->expects($this->exactly(2))
+            ->method('error')
+            ->willReturnCallback(function ($message, $context = []) {
+                static $callCount = 0;
+                $callCount++;
+
+                if ($callCount === 1) {
+                    // First error from executeCommand()
+                    $this->assertStringContainsString('Command failed with exit code 1: chmod +x /tmp/wp-cli.phar', $message);
+                    $this->assertArrayHasKey('output', $context);
+                } else {
+                    // Second error from installWpCli()
+                    $this->assertEquals('Failed to make WP-CLI executable', $message);
+                }
+            });
+
+        // Test installation
+        $result = $this->manager->installWpCli();
+        $this->assertFalse($result);
+    }
+
+    /**
+     * Test WP-CLI installation failure when moving to system directory.
+     */
+    public function testInstallWpCliMoveFailure(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(4))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // WP-CLI not installed check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Download succeeds
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Chmod succeeds
+                'Move failed<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>'     // Move fails
+            );
+
+        // Expect two error logs
+        $this->mockLogger->expects($this->exactly(2))
+            ->method('error')
+            ->willReturnCallback(function ($message, $context = []) {
+                static $callCount = 0;
+                $callCount++;
+
+                if ($callCount === 1) {
+                    // First error from executeCommand()
+                    $this->assertStringContainsString('Command failed with exit code 1: mv /tmp/wp-cli.phar /usr/local/bin/wp', $message);
+                    $this->assertArrayHasKey('output', $context);
+                } else {
+                    // Second error from installWpCli()
+                    $this->assertEquals('Failed to move WP-CLI to system directory', $message);
+                }
+            });
+
+        // Test installation
+        $result = $this->manager->installWpCli();
+        $this->assertFalse($result);
+    }
+
+    /**
+     * Test WP-CLI installation failure during verification.
+     */
+    public function testInstallWpCliVerificationFailure(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(5))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                '',  // WP-CLI not installed check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Download succeeds
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Chmod succeeds
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // Move succeeds
+                'Verification failed<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>' // Verification fails
+            );
+
+        // Expect two error logs
+        $this->mockLogger->expects($this->exactly(2))
+            ->method('error')
+            ->willReturnCallback(function ($message, $context = []) {
+                static $callCount = 0;
+                $callCount++;
+
+                if ($callCount === 1) {
+                    // First error from executeCommand()
+                    $this->assertStringContainsString('Command failed with exit code 1: wp --info', $message);
+                    $this->assertArrayHasKey('output', $context);
+                } else {
+                    // Second error from installWpCli()
+                    $this->assertEquals('WP-CLI installation verification failed', $message);
+                }
+            });
+
+        // Test installation
+        $result = $this->manager->installWpCli();
+        $this->assertFalse($result);
+    }
 }

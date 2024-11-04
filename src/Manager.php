@@ -2526,4 +2526,72 @@ EOF',
 
         return true;
     }
+
+    /**
+     * Downloads and installs WP-CLI on the server.
+     *
+     * This method:
+     * - Downloads WP-CLI to /tmp
+     * - Verifies the download
+     * - Makes it executable
+     * - Moves it to /usr/local/bin
+     * - Verifies the installation
+     *
+     * @return bool Returns true if WP-CLI was successfully installed, false otherwise
+     */
+    public function installWpCli(): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        // Define paths
+        $tmpPath     = '/tmp/wp-cli.phar';
+        $installPath = '/usr/local/bin/wp';
+
+        // Check if WP-CLI is already installed
+        $checkCommand = "wp --info 2>/dev/null | grep -q 'WP-CLI version' && echo 'exists'";
+        $wpCliExists  = Helper\trim_if_string($this->execSsh($checkCommand));
+
+        if ($wpCliExists === 'exists') {
+            $this->logger->info('WP-CLI is already installed');
+
+            return true;
+        }
+
+        // Download WP-CLI to temporary location
+        $this->logger->info('Downloading WP-CLI...');
+        if (!$this->executeCommand("curl -o $tmpPath https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar")) {
+            $this->logger->error('Failed to download WP-CLI');
+
+            return false;
+        }
+
+        // Make the file executable
+        $this->logger->info('Making WP-CLI executable...');
+        if (!$this->executeCommand("chmod +x $tmpPath")) {
+            $this->logger->error('Failed to make WP-CLI executable');
+
+            return false;
+        }
+
+        // Move to /usr/local/bin
+        $this->logger->info('Moving WP-CLI to system directory...');
+        if (!$this->executeCommand("mv $tmpPath $installPath")) {
+            $this->logger->error('Failed to move WP-CLI to system directory');
+
+            return false;
+        }
+
+        // Verify installation
+        $this->logger->info('Verifying WP-CLI installation...');
+        if (!$this->executeCommand('wp --info')) {
+            $this->logger->error('WP-CLI installation verification failed');
+
+            return false;
+        }
+
+        $this->logger->info('WP-CLI installed successfully');
+
+        return true;
+    }
 }
