@@ -3024,15 +3024,19 @@ class ManagerTest extends TestCase
                 return true;
             });
 
-        // Track exec calls with the new executeCommand format
-        $this->sshMock->expects($this->exactly(3))
+        // Track exec calls
+        $this->sshMock->expects($this->exactly(5))  // 5 executeCommand calls
             ->method('exec')
             ->willReturnCallback(function ($command) {
-                // Return success for all commands (exit code 0)
-                return 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
+                if (strpos($command, Manager::NONINTERACTIVE_SHELL) !== false) {
+                    // All commands should return success
+                    return 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
+                }
+
+                return '';
             });
 
-        $result = $this->manager->updateCyberPanel(true);
+        $result = $this->manager->updateCyberPanel(true, true);
 
         // Verify timeout was set and restored correctly
         $this->assertEquals([3600, $originalTimeout], $timeoutCalls);
@@ -3058,15 +3062,19 @@ class ManagerTest extends TestCase
                 return true;
             });
 
-        // Track exec call with the new executeCommand format
-        $this->sshMock->expects($this->once())
+        // Track exec calls
+        $this->sshMock->expects($this->exactly(3))  // 3 executeCommand calls
             ->method('exec')
             ->willReturnCallback(function ($command) {
-                // Return success for the update command (exit code 0)
-                return 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
+                if (strpos($command, Manager::NONINTERACTIVE_SHELL) !== false) {
+                    // All commands should return success
+                    return 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
+                }
+
+                return '';
             });
 
-        $result = $this->manager->updateCyberPanel(false);
+        $result = $this->manager->updateCyberPanel(false, true);
 
         // Verify timeout was set and restored correctly
         $this->assertEquals([3600, 60], $timeoutCalls);
@@ -3097,12 +3105,44 @@ class ManagerTest extends TestCase
             ->method('exec')
             ->willReturn(false);
 
-        $result = $this->manager->updateCyberPanel(true);
+        $result = $this->manager->updateCyberPanel(true, true);
 
         // Verify timeout was set and restored correctly
         $this->assertEquals([3600, 60], $timeoutCalls);
 
         $this->assertFalse($result);
+    }
+
+    // Add new test for update without pip install
+    public function testUpdateCyberPanelWithoutPipInstall(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Track timeout calls
+        $timeoutCalls = [];
+        $this->sshMock->expects($this->exactly(2))
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) use (&$timeoutCalls) {
+                $timeoutCalls[] = $timeout;
+
+                return true;
+            });
+
+        // Track exec call with the new executeCommand format
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturnCallback(function ($command) {
+                // Return success for the update command (exit code 0)
+                return 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
+            });
+
+        $result = $this->manager->updateCyberPanel(false, false);  // Both OS update and pip install disabled
+
+        // Verify timeout was set and restored correctly
+        $this->assertEquals([3600, 60], $timeoutCalls);
+        $this->assertTrue($result);
     }
 
     /**
@@ -3124,16 +3164,21 @@ class ManagerTest extends TestCase
                 return true;
             });
 
-        // Expect CyberPanel update to fail
-        $this->sshMock->expects($this->once())
+        // Track exec calls
+        $this->sshMock->expects($this->exactly(2))  // Updated count to include pip file check
             ->method('exec')
-            ->willReturn(false);
+            ->willReturnCallback(function ($command) {
+                if (strpos($command, 'test -f') !== false) {
+                    return false; // Simulate pip file doesn't exist
+                }
+
+                return false; // Simulate command failure
+            });
 
         $result = $this->manager->updateCyberPanel(false);
 
         // Verify timeout was set and restored correctly
         $this->assertEquals([3600, 60], $timeoutCalls);
-
         $this->assertFalse($result);
     }
 
@@ -3167,7 +3212,8 @@ class ManagerTest extends TestCase
                 return 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
             });
 
-        $result = $this->manager->updateCyberPanel(false, 7200);
+        // Pass the custom timeout as the third parameter
+        $result = $this->manager->updateCyberPanel(false, false, 7200);
 
         // Verify timeout was set and restored correctly
         $this->assertEquals([7200, $originalTimeout], $timeoutCalls);
@@ -4437,23 +4483,38 @@ class ManagerTest extends TestCase
         $managerMock->method('configureMySql')->willReturn(true);
         $managerMock->method('updateMyCnfPassword')->willReturn(true);
         $managerMock->method('openFirewall')->willReturn(true);
-        $managerMock->method('updateCyberPanel')->willReturn(true);
         $managerMock->method('enableCyberPanelApiAccess')->willReturn(true);
         $managerMock->method('updateVhostPy')->willReturn(true);
         $managerMock->method('updateVhostConfsPy')->willReturn(true);
         $managerMock->method('installWpCli')->willReturn(true);
 
-        // Verify that openFirewall is called with custom port
+        // Verify that installPhpVersionsAndExtensions is called with custom timeout
         $managerMock->expects($this->once())
-            ->method('openFirewall')
-            ->with(8080)
+            ->method('installPhpVersionsAndExtensions')
+            ->with($this->equalTo(true), $this->equalTo(7200))
+            ->willReturn(true);
+
+        // Verify that installLiteSpeedPhpVersionsAndExtensions is called with custom timeout
+        $managerMock->expects($this->once())
+            ->method('installLiteSpeedPhpVersionsAndExtensions')
+            ->with($this->equalTo(true), $this->equalTo(7200))
             ->willReturn(true);
 
         // Verify that configurePhp is called with display_errors disabled
         $managerMock->expects($this->once())
             ->method('configurePhp')
-            ->with(false)
+            ->with($this->equalTo(false))
             ->willReturn(true);
+
+        // Verify that openFirewall is called with custom port
+        $managerMock->expects($this->once())
+            ->method('openFirewall')
+            ->with($this->equalTo(8080))
+            ->willReturn(true);
+
+        // Verify that updateCyberPanel is never called since updateCyberPanel is false
+        $managerMock->expects($this->never())
+            ->method('updateCyberPanel');
 
         // Inject the SSH mock
         $managerMock->setSshConnection($this->sshMock);
@@ -4465,7 +4526,8 @@ class ManagerTest extends TestCase
             phpDisplayErrors: false,
             mysqlPort: 8080,
             updateCyberPanel: false,
-            updateOs: false
+            updateOs: false,
+            pipInstall: false
         );
 
         $this->assertTrue($result);

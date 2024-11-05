@@ -1728,15 +1728,20 @@ EOF',
      * in a noninteractive way. It prevents interactive prompts and executes the update script
      * with appropriate timeouts.
      *
-     * @param bool $updateOs Whether to also update the operating system packages
-     * @param int  $timeout  SSH timeout in seconds (default: 3600 = 1 hour)
+     * @param bool $updateOs   Whether to also update the operating system packages
+     * @param bool $pipInstall Whether to also pip install. See link.
+     * @param int  $timeout    SSH timeout in seconds (default: 3600 = 1 hour)
      *
      * @return bool Returns true if the update was successful, false otherwise
+     *
+     * @link https://community.cyberpanel.net/t/pyxattr-error-updating-cyberpanel/54460/5
      */
-    public function updateCyberPanel(bool $updateOs = true, int $timeout = 3600): bool
+    public function updateCyberPanel(bool $updateOs = true, bool $pipInstall = true, int $timeout = 3600): bool
     {
         // Ensure SSH connection is established
         $this->verifyConnectionSsh();
+
+        $pipFile = '/usr/local/requirments.txt';
 
         try {
             // Store the original timeout
@@ -1764,6 +1769,23 @@ EOF',
                 }
 
                 $this->logger->info('OS packages updated successfully');
+            }
+
+            if ($pipInstall) {
+                // Check if the pip file exists
+                if (!$this->executeCommand("test -f $pipFile")) {
+                    $this->logger->error("Pip file $pipFile does not exist. Not installing pip.");
+                } else {
+                    $this->logger->info('Installing pip...');
+
+                    if (!$this->executeCommand("pip install -r $pipFile --ignore-installed")) {
+                        $this->logger->error('Failed to install pip');
+
+                        return false;
+                    }
+
+                    $this->logger->info('pip installed successfully');
+                }
             }
 
             // Run the official preUpgrade script
@@ -2617,6 +2639,7 @@ EOF',
      * @param int  $mysqlPort        MySQL port to open in firewall
      * @param bool $updateCyberPanel Whether to update CyberPanel
      * @param bool $updateOs         Whether to update OS packages during CyberPanel update
+     * @param bool $pipInstall       Whether to also pip install
      *
      * @throws \Exception If SSH connection fails or if critical configurations fail
      *
@@ -2628,7 +2651,8 @@ EOF',
         bool $phpDisplayErrors = true,
         int $mysqlPort = 3306,
         bool $updateCyberPanel = true,
-        bool $updateOs = true
+        bool $updateOs = true,
+        bool $pipInstall = true
     ): bool {
         try {
             $this->logger->info('Starting configureDroplet()...');
@@ -2699,7 +2723,7 @@ EOF',
             // CyberPanel Configuration
             $this->logger->info('Configuring CyberPanel...');
 
-            if ($updateCyberPanel && !$this->updateCyberPanel($updateOs, $timeout)) {
+            if ($updateCyberPanel && !$this->updateCyberPanel($updateOs, $pipInstall, $timeout)) {
                 $this->logger->error('Failed to update CyberPanel');
 
                 return false;
