@@ -32,12 +32,12 @@ This PHP library provides functionality to manage DigitalOcean droplets, CyberPa
 composer require fofx/droplet-manager
 ```
 
-2. Create configuration file:
+2. Create config folder and configuration file:
 ```bash
-cp config/droplet-manager.config.php.example config/droplet-manager.config.php
+mkdir -p config && cp vendor/fofx/droplet-manager/config/droplet-manager.config.php.example config/droplet-manager.config.php
 ```
 
-3. Configure your credentials in `droplet-manager.config.php`:
+3. Configure your credentials in `config/droplet-manager.config.php`:
 ```php
 return [
     'digitalocean' => [
@@ -230,7 +230,7 @@ foreach ($websites as $website) {
 
 ## Requirements
 
-- PHP 8.2 or higher
+- PHP 8.1 or higher
 - Composer
 - Required PHP extensions:
   - curl
