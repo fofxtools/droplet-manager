@@ -52,15 +52,6 @@ return [
         'api_key'    => 'your_godaddy_key',
         'api_secret' => 'your_godaddy_secret',
     ],
-    // Individual droplet configurations
-    'droplet-1' => [
-        'server_ip'           => '123.123.123.123',
-        'root_password'       => 'your_root_password',
-        'mysql_root_password' => 'your_mysql_password',
-        'cyberpanel_port'     => 8090,
-        'cyberpanel_admin'    => 'admin',
-        'cyberpanel_password' => 'your_cyberpanel_password',
-    ],
     // ... other configurations
 ];
 ```
@@ -84,13 +75,15 @@ return [
 
 2. Create a new droplet using the provided example script. See `examples/createDroplet.php`:
 ```php
+require_once __DIR__ . '/vendor/autoload.php';
+
 use FOfX\DropletManager\Manager;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
 use Monolog\Level;
 
 // Create a logger
-$logger = new Logger('droplet_creation');
+$logger = new Logger('droplet-manager');
 $logger->pushHandler(new StreamHandler('php://stdout', Level::Info));
 
 // Create a new Manager instance
@@ -104,6 +97,9 @@ $size        = 's-1vcpu-1gb';
 // Create the droplet
 $logger->info("Creating droplet '{$dropletName}'...");
 $dropletInfo = $manager->createDroplet($dropletName, $region, $size);
+
+$logger->info('var_dump(dropletInfo):');
+var_dump($dropletInfo);
 ```
 
 3. After running the script, wait for an email from Digital Ocean containing:
@@ -113,6 +109,7 @@ $dropletInfo = $manager->createDroplet($dropletName, $region, $size);
 4. Log into your new droplet. You can use the Digital Ocean droplet console, or SSH (`ssh root@your_droplet_ip`). And set up credentials.
    - You'll be prompted to enter the temporary password
    - You'll then be required to set a new root password
+   - You should update the system as prompted
 
 5. Retrieve important passwords from the droplet:
    - CyberPanel admin password: `cat /root/.litespeed_password`
@@ -146,9 +143,31 @@ The `configureDroplet()` method performs some server setup:
 - MySQL remote access configuration and firewall rules
 - WP-CLI installation
 
+In the code below, 'test' is the name of the droplet. And the associated section in the config file is `'test' => [ ... ]`.
+
 ```php
+require_once __DIR__ . '/vendor/autoload.php';
+
+use FOfX\DropletManager\Manager;
+use Monolog\Logger;
+use Monolog\Handler\StreamHandler;
+use Monolog\Level;
+
+// Create a logger
+$logger = new Logger('droplet-manager');
+$logger->pushHandler(new StreamHandler('php://stdout', Level::Info));
+
+// Create a new Manager instance
+$manager = new Manager('test', 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php', null, $logger);
+
+// Optionally enable verbose and debug output
+//$manager->setVerbose(true);
+//$manager->setDebug(true);
+
 // Configure the droplet with custom settings
-$manager->configureDroplet(
+$logger->info('Starting droplet configuration...');
+
+$result = $manager->configureDroplet(
     updateCyberPanel: true,
     updateOs: true,
     pipInstall: true,
@@ -156,6 +175,24 @@ $manager->configureDroplet(
     phpDisplayErrors: false,
     mysqlPort: 3306
 );
+var_dump($result);
+```
+
+### Create a User
+
+Create a new user.
+
+```php
+$result = $manager->connectCyberLink()->createUser(
+    firstName: 'John',
+    lastName: 'Doe',
+    email: 'john.doe@gmail.com',
+    username: 'johndoe',
+    password: 'secure_password',
+    websitesLimit: 0,
+    debug: false
+);
+var_dump($result);
 ```
 
 ### Website Management
@@ -165,34 +202,35 @@ See `examples/setupWebsite.php`. This method will create a new website.
 ```php
 // Create a new website
 $manager->setupWebsite(
-    domainName: 'example.com',
-    debug: true,
-    websiteEmail: 'admin@example.com',
+    domainName: 'examplesite.com',
+    debug: false,
+    websiteEmail: 'john.doe@gmail.com',
     username: 'admin',
     password: 'secure_password'
 );
-
-// Configure HTTPS in .htaccess
-$manager->createHtaccessForHttpsRedirect('example.com');
 ```
 
-### Database Management
+### Server Information
 
 ```php
-// Create a database
-$manager->createDatabase(
-    'example.com',
-    'dbuser',
-    'db_password'
-);
+// List websites
+$websites = $manager->getWebsites();
+print_r($websites);
 
-// List databases
-$databases = $manager->getDatabases('example.com');
+// List users
+$users = $manager->getUsers();
+print_r($users);
+
+// List databases for each website
+foreach ($websites as $website) {
+    $databases = $manager->getDatabases($website);
+    print_r($databases);
+}
 ```
 
 ## Requirements
 
-- PHP 8.1 or higher
+- PHP 8.2 or higher
 - Composer
 - Required PHP extensions:
   - curl

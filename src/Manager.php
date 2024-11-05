@@ -297,10 +297,13 @@ class Manager
                     'disk'      => $dropletInfo->disk,
                     'region'    => $dropletInfo->region->slug,
                     'image'     => $dropletInfo->image->slug,
-                    'kernel'    => $dropletInfo->kernel->id,
+                    // DigitalOcean docblocks say that kernel is non-nullable, but it's actually nullable
+                    // So suppress the PHPStan error message
+                    /** @phpstan-ignore-next-line */
+                    'kernel'    => $dropletInfo->kernel?->id,
                     'size'      => $dropletInfo->size->slug,
                     'createdAt' => $dropletInfo->createdAt,
-                    'networks'  => array_map(fn ($network) => [
+                    'networks'  => array_map(fn($network) => [
                         'ipAddress' => $network->ipAddress,
                         'type'      => $network->type,
                         'netmask'   => $network->netmask,

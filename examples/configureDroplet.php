@@ -8,7 +8,7 @@ use Monolog\Handler\StreamHandler;
 use Monolog\Level;
 
 // Create a logger
-$logger = new Logger('droplet_configuration');
+$logger = new Logger('droplet-manager');
 $logger->pushHandler(new StreamHandler('php://stdout', Level::Info));
 
 // Create a new Manager instance
@@ -22,7 +22,7 @@ $manager = new Manager('test', 'config' . DIRECTORY_SEPARATOR . 'droplet-manager
 $logger->info('Starting droplet configuration...');
 
 try {
-    $success = $manager->configureDroplet(
+    $result = $manager->configureDroplet(
         updateCyberPanel: true,   // Update CyberPanel
         updateOs: true,           // Update OS during CyberPanel update
         pipInstall: true,         // pip install
@@ -32,7 +32,7 @@ try {
         timeout: 3600             // SSH timeout in seconds
     );
 
-    if ($success) {
+    if ($result) {
         $logger->info('Droplet configuration completed successfully!');
     } else {
         $logger->error('Droplet configuration failed.');

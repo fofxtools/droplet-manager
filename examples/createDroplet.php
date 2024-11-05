@@ -8,7 +8,7 @@ use Monolog\Handler\StreamHandler;
 use Monolog\Level;
 
 // Create a logger
-$logger = new Logger('droplet_creation');
+$logger = new Logger('droplet-manager');
 $logger->pushHandler(new StreamHandler('php://stdout', Level::Info));
 
 // Create a new Manager instance

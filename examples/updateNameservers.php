@@ -12,7 +12,7 @@ $domain = 'example.com';
 $registrar = 'namecheap';
 
 // Create a logger
-$logger = new Logger('nameserver_update');
+$logger = new Logger('droplet-manager');
 $logger->pushHandler(new StreamHandler('php://stdout', Level::Info));
 
 // Create a new Manager instance

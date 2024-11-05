@@ -486,13 +486,7 @@ EOL;
     public function listWebsites(bool $namesOnly = false)
     {
         $command  = $this->commandBuilder(__FUNCTION__ . 'Json');
-        $websites = json_decode($this->ssh->exec($command));
-
-        if (!is_array($websites)) {
-            // If the JSON output is not an array, decode again to get the correct format
-            // Decode associative true to get array elements rather than objects
-            $websites = json_decode($websites, true);
-        }
+        $websites = json_decode($this->ssh->exec($command), true);
 
         if ($namesOnly) {
             $names = [];
