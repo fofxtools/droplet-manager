@@ -5,8 +5,8 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use FOfX\DropletManager\Manager;
 use FOfX\Helper;
 
-$manager   = new Manager('test');
-$cyberLink = $manager->connectCyberLink();
+$manager = new Manager('test');
+//$cyberLink = $manager->connectCyberLink();
 
 //$manager->setVerbose(true);
 //$manager->setDebug(true);

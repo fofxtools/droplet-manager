@@ -463,7 +463,7 @@ class ManagerTest extends TestCase
             'tags'     => [],
             'features' => ['monitoring', 'droplet_agent', 'private_networking'],
             'vpcUuid'  => '2dcddc3e-f4e3-4ec4-8397-0479d7415ec2',
-            'kernel'   => null,
+            'kernel'   => new \DigitalOceanV2\Entity\Kernel(['id' => 123]),
         ]);
 
         $this->mockDropletApi->method('create')->willReturn($createdDroplet);
@@ -501,7 +501,7 @@ class ManagerTest extends TestCase
             'tags'     => [],
             'features' => ['monitoring', 'droplet_agent', 'private_networking'],
             'vpcUuid'  => '2dcddc3e-f4e3-4ec4-8397-0479d7415ec2',
-            'kernel'   => null,
+            'kernel'   => 123,
         ];
 
         // Check if the result matches the expected array
@@ -4409,16 +4409,16 @@ class ManagerTest extends TestCase
                 'setupAliasesAndFunctions',
                 'configureScreen',
                 'updateNanoCtrlFSearchBinding',
+                'updateCyberPanel',
+                'enableCyberPanelApiAccess',
+                'updateVhostPy',
+                'updateVhostConfsPy',
                 'installPhpVersionsAndExtensions',
                 'installLiteSpeedPhpVersionsAndExtensions',
                 'configurePhp',
                 'configureMySql',
                 'updateMyCnfPassword',
                 'openFirewall',
-                'updateCyberPanel',
-                'enableCyberPanelApiAccess',
-                'updateVhostPy',
-                'updateVhostConfsPy',
                 'installWpCli',
             ])
             ->getMock();
@@ -4427,6 +4427,10 @@ class ManagerTest extends TestCase
         $managerMock->method('setupAliasesAndFunctions')->willReturn(true);
         $managerMock->method('configureScreen')->willReturn(true);
         $managerMock->method('updateNanoCtrlFSearchBinding')->willReturn(true);
+        $managerMock->method('updateCyberPanel')->willReturn(true);
+        $managerMock->method('enableCyberPanelApiAccess')->willReturn(true);
+        $managerMock->method('updateVhostPy')->willReturn(true);
+        $managerMock->method('updateVhostConfsPy')->willReturn(true);
         $managerMock->method('installPhpVersionsAndExtensions')->willReturn(false); // Simulate failure
 
         // Expect error to be logged
@@ -4434,11 +4438,21 @@ class ManagerTest extends TestCase
             ->method('error')
             ->with('Failed to install PHP versions and extensions');
 
+        // Methods after the failure should not be called
+        $managerMock->expects($this->never())->method('installLiteSpeedPhpVersionsAndExtensions');
+        $managerMock->expects($this->never())->method('configurePhp');
+        $managerMock->expects($this->never())->method('configureMySql');
+        $managerMock->expects($this->never())->method('updateMyCnfPassword');
+        $managerMock->expects($this->never())->method('openFirewall');
+        $managerMock->expects($this->never())->method('installWpCli');
+
         // Inject the SSH mock
         $managerMock->setSshConnection($this->sshMock);
 
         // Test configuration
         $result = $managerMock->configureDroplet();
+
+        // Assert the result
         $this->assertFalse($result);
     }
 
@@ -4488,46 +4502,44 @@ class ManagerTest extends TestCase
         $managerMock->method('updateVhostConfsPy')->willReturn(true);
         $managerMock->method('installWpCli')->willReturn(true);
 
-        // Verify that installPhpVersionsAndExtensions is called with custom timeout
+        // Verify method calls with custom parameters
+        $managerMock->expects($this->once())
+            ->method('updateCyberPanel')
+            ->with($this->equalTo(false), $this->equalTo(false), $this->equalTo(7200))
+            ->willReturn(true);
+
         $managerMock->expects($this->once())
             ->method('installPhpVersionsAndExtensions')
             ->with($this->equalTo(true), $this->equalTo(7200))
             ->willReturn(true);
 
-        // Verify that installLiteSpeedPhpVersionsAndExtensions is called with custom timeout
         $managerMock->expects($this->once())
             ->method('installLiteSpeedPhpVersionsAndExtensions')
             ->with($this->equalTo(true), $this->equalTo(7200))
             ->willReturn(true);
 
-        // Verify that configurePhp is called with display_errors disabled
         $managerMock->expects($this->once())
             ->method('configurePhp')
             ->with($this->equalTo(false))
             ->willReturn(true);
 
-        // Verify that openFirewall is called with custom port
         $managerMock->expects($this->once())
             ->method('openFirewall')
             ->with($this->equalTo(8080))
             ->willReturn(true);
 
-        // Verify that updateCyberPanel is never called since updateCyberPanel is false
-        $managerMock->expects($this->never())
-            ->method('updateCyberPanel');
-
         // Inject the SSH mock
         $managerMock->setSshConnection($this->sshMock);
 
-        // Test configuration with custom parameters
+        // Test configuration with custom parameters in new order
         $result = $managerMock->configureDroplet(
+            updateCyberPanel: true,
+            updateOs: false,
+            pipInstall: false,
             updateApt: true,
-            timeout: 7200,
             phpDisplayErrors: false,
             mysqlPort: 8080,
-            updateCyberPanel: false,
-            updateOs: false,
-            pipInstall: false
+            timeout: 7200
         );
 
         $this->assertTrue($result);

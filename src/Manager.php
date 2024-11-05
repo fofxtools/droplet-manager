@@ -24,18 +24,18 @@ class Manager
     // Used to prevent interactive prompts in non-interactive shell
     public const NONINTERACTIVE_SHELL = 'DEBIAN_FRONTEND=noninteractive';
 
-    private $config;
-    private $cyberApi;
-    private $dropletName;
-    private $sshConnection    = null;
-    private $sshAuthenticated = false;
-    private $digitalOceanClient;
-    private $digitalOceanClientIsAuthenticated = false;
-    private $cyberLinkConnection;
+    private array $config;
+    private ?string $dropletName                    = null;
+    private bool $verbose                           = false;
+    private bool $debug                             = false;
+    private bool $sshAuthenticated                  = false;
+    private bool $digitalOceanClientIsAuthenticated = false;
+    private ?CyberApi $cyberApi                     = null;
+    private ?SSH2 $sshConnection                    = null;
+    private ?DigitalOceanClient $digitalOceanClient = null;
+    private ?CyberLink $cyberLinkConnection         = null;
+    private ?NamecheapApi $namecheapApi             = null;
     private Logger $logger;
-    private $namecheapApi;
-    private bool $verbose = false;
-    private bool $debug   = false;
 
     /**
      * Constructor: Retrieve the configuration for DigitalOcean droplet management.
@@ -116,7 +116,7 @@ class Manager
      *
      * @param string $dropletName The name of the droplet to manage.
      */
-    public function setDropletName(string $dropletName)
+    public function setDropletName(string $dropletName): void
     {
         $this->dropletName = $dropletName;
     }
@@ -297,7 +297,7 @@ class Manager
                     'disk'      => $dropletInfo->disk,
                     'region'    => $dropletInfo->region->slug,
                     'image'     => $dropletInfo->image->slug,
-                    'kernel'    => $dropletInfo->kernel ? $dropletInfo->kernel->id : null,
+                    'kernel'    => $dropletInfo->kernel->id,
                     'size'      => $dropletInfo->size->slug,
                     'createdAt' => $dropletInfo->createdAt,
                     'networks'  => array_map(fn ($network) => [
@@ -2633,26 +2633,26 @@ EOF',
      * - CyberPanel updates and configurations
      * - Additional tools installation (WP-CLI)
      *
-     * @param bool $updateApt        Whether to update apt packages
-     * @param int  $timeout          SSH timeout in seconds
-     * @param bool $phpDisplayErrors Whether to enable PHP display errors
-     * @param int  $mysqlPort        MySQL port to open in firewall
      * @param bool $updateCyberPanel Whether to update CyberPanel
      * @param bool $updateOs         Whether to update OS packages during CyberPanel update
      * @param bool $pipInstall       Whether to also pip install
+     * @param bool $updateApt        Whether to update apt packages
+     * @param bool $phpDisplayErrors Whether to enable PHP display errors
+     * @param int  $mysqlPort        MySQL port to open in firewall
+     * @param int  $timeout          SSH timeout in seconds
      *
      * @throws \Exception If SSH connection fails or if critical configurations fail
      *
      * @return bool Returns true if all configurations were successful, false if any failed
      */
     public function configureDroplet(
-        bool $updateApt = true,
-        int $timeout = 3600,
-        bool $phpDisplayErrors = true,
-        int $mysqlPort = 3306,
         bool $updateCyberPanel = true,
         bool $updateOs = true,
-        bool $pipInstall = true
+        bool $pipInstall = true,
+        bool $updateApt = true,
+        bool $phpDisplayErrors = false,
+        int $mysqlPort = 3306,
+        int $timeout = 3600
     ): bool {
         try {
             $this->logger->info('Starting configureDroplet()...');
@@ -2674,6 +2674,33 @@ EOF',
 
             if (!$this->updateNanoCtrlFSearchBinding()) {
                 $this->logger->error('Failed to update nano search binding');
+
+                return false;
+            }
+
+            // CyberPanel Configuration
+            $this->logger->info('Configuring CyberPanel...');
+
+            if ($updateCyberPanel && !$this->updateCyberPanel($updateOs, $pipInstall, $timeout)) {
+                $this->logger->error('Failed to update CyberPanel');
+
+                return false;
+            }
+
+            if (!$this->enableCyberPanelApiAccess()) {
+                $this->logger->error('Failed to enable CyberPanel API access');
+
+                return false;
+            }
+
+            if (!$this->updateVhostPy()) {
+                $this->logger->error('Failed to update vhost.py');
+
+                return false;
+            }
+
+            if (!$this->updateVhostConfsPy()) {
+                $this->logger->error('Failed to update vhostConfs.py');
 
                 return false;
             }
@@ -2716,33 +2743,6 @@ EOF',
 
             if (!$this->openFirewall($mysqlPort)) {
                 $this->logger->error('Failed to open MySQL port in firewall');
-
-                return false;
-            }
-
-            // CyberPanel Configuration
-            $this->logger->info('Configuring CyberPanel...');
-
-            if ($updateCyberPanel && !$this->updateCyberPanel($updateOs, $pipInstall, $timeout)) {
-                $this->logger->error('Failed to update CyberPanel');
-
-                return false;
-            }
-
-            if (!$this->enableCyberPanelApiAccess()) {
-                $this->logger->error('Failed to enable CyberPanel API access');
-
-                return false;
-            }
-
-            if (!$this->updateVhostPy()) {
-                $this->logger->error('Failed to update vhost.py');
-
-                return false;
-            }
-
-            if (!$this->updateVhostConfsPy()) {
-                $this->logger->error('Failed to update vhostConfs.py');
 
                 return false;
             }

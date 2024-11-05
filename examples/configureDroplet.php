@@ -23,12 +23,13 @@ $logger->info('Starting droplet configuration...');
 
 try {
     $success = $manager->configureDroplet(
-        updateApt: true,          // Update apt packages
-        timeout: 3600,            // SSH timeout in seconds
-        phpDisplayErrors: true,   // Enable PHP display errors
-        mysqlPort: 3306,          // MySQL port to open in firewall
         updateCyberPanel: true,   // Update CyberPanel
-        updateOs: true            // Update OS during CyberPanel update
+        updateOs: true,           // Update OS during CyberPanel update
+        pipInstall: true,         // pip install
+        updateApt: true,          // Update apt packages
+        phpDisplayErrors: false,  // PHP display errors
+        mysqlPort: 3306,          // MySQL port to open in firewall
+        timeout: 3600             // SSH timeout in seconds
     );
 
     if ($success) {

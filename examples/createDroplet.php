@@ -12,7 +12,7 @@ $logger = new Logger('droplet_creation');
 $logger->pushHandler(new StreamHandler('php://stdout', Level::Info));
 
 // Create a new Manager instance
-$manager = new Manager('test', 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php', null, $logger);
+$manager = new Manager(null, 'config' . DIRECTORY_SEPARATOR . 'droplet-manager.config.php', null, $logger);
 
 // Set the parameters for the new droplet
 $dropletName = 'test-droplet-' . uniqid();
