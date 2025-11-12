@@ -25,11 +25,13 @@ class Manager
     public const NONINTERACTIVE_SHELL = 'DEBIAN_FRONTEND=noninteractive';
 
     private array $config;
-    private ?string $dropletName                    = null;
     private bool $verbose                           = false;
     private bool $debug                             = false;
+    private ?string $dropletName                    = null;
+    private array $systemUtilities                  = ['plocate', 'sqlcipher', 'supervisor'];
     private bool $sshAuthenticated                  = false;
     private bool $digitalOceanClientIsAuthenticated = false;
+
     private ?CyberApi $cyberApi                     = null;
     private ?SSH2 $sshConnection                    = null;
     private ?DigitalOceanClient $digitalOceanClient = null;
@@ -129,6 +131,28 @@ class Manager
     public function getDropletName(): string
     {
         return $this->dropletName;
+    }
+
+    /**
+     * Set the system utilities to install.
+     *
+     * @param array $systemUtilities Array of system utility package names.
+     *
+     * @return void
+     */
+    public function setSystemUtilities(array $systemUtilities): void
+    {
+        $this->systemUtilities = $systemUtilities;
+    }
+
+    /**
+     * Get the system utilities to install.
+     *
+     * @return array Array of system utility package names.
+     */
+    public function getSystemUtilities(): array
+    {
+        return $this->systemUtilities;
     }
 
     /**
@@ -289,21 +313,21 @@ class Manager
 
                 // Return the droplet info as an array
                 $dropletInfoArray = [
-                    'id'        => $dropletInfo->id,
-                    'name'      => $dropletInfo->name,
-                    'status'    => $dropletInfo->status,
-                    'memory'    => $dropletInfo->memory,
-                    'vcpus'     => $dropletInfo->vcpus,
-                    'disk'      => $dropletInfo->disk,
-                    'region'    => $dropletInfo->region->slug,
-                    'image'     => $dropletInfo->image->slug,
+                    'id'     => $dropletInfo->id,
+                    'name'   => $dropletInfo->name,
+                    'status' => $dropletInfo->status,
+                    'memory' => $dropletInfo->memory,
+                    'vcpus'  => $dropletInfo->vcpus,
+                    'disk'   => $dropletInfo->disk,
+                    'region' => $dropletInfo->region->slug,
+                    'image'  => $dropletInfo->image->slug,
                     // DigitalOcean docblocks say that kernel is non-nullable, but it's actually nullable
                     // So suppress the PHPStan error message
                     /** @phpstan-ignore-next-line */
                     'kernel'    => $dropletInfo->kernel?->id,
                     'size'      => $dropletInfo->size->slug,
                     'createdAt' => $dropletInfo->createdAt,
-                    'networks'  => array_map(fn($network) => [
+                    'networks'  => array_map(fn ($network) => [
                         'ipAddress' => $network->ipAddress,
                         'type'      => $network->type,
                         'netmask'   => $network->netmask,
@@ -696,8 +720,11 @@ EOF',
     /**
      * Creates a database for a given domain name and username on the CyberPanel server.
      *
+     * Note: CyberPanel requires unique database usernames per website. If the username already exists
+     * (from another website), this method will fail. Use a different username for each website.
+     *
      * @param string $domainName The domain name to be associated with the database.
-     * @param string $username   The username for the database.
+     * @param string $username   The username for the database. Must be unique across all websites.
      * @param string $password   The password for the database user.
      *
      * @return bool True on success, false on failure.
@@ -709,11 +736,38 @@ EOF',
         // Sanitize domain name for MySQL database name
         $dbName = Helper\sanitize_domain_for_database($domainName, $username);
 
+        // CyberPanel enforces a 32-character limit for database names. Also remove trailing underscores.
+        if (strlen($dbName) > 32) {
+            $dbName = rtrim(substr($dbName, 0, 32), '_');
+        }
+
         try {
-            return $cyber->createDatabase($domainName, $dbName, $username, $password);
+            $result = $cyber->createDatabase($domainName, $dbName, $username, $password);
+
+            // Check if the operation failed (returns false instead of throwing exception)
+            if ($result === false) {
+                // Get the last message from CyberPanel
+                $errorMsg = $cyber->getLastMessage() ?: 'Unknown error';
+
+                // Check if error might be due to existing user
+                if (stripos($errorMsg, 'user') !== false || stripos($errorMsg, 'exist') !== false || stripos($errorMsg, 'duplicate') !== false || stripos($errorMsg, 'already') !== false) {
+                    $this->logger->error(
+                        "Database creation failed for '{$domainName}': User '{$username}' may already exist. " .
+                        'CyberPanel requires unique usernames per website. ' .
+                        "Please use a different username (e.g., '{$username}2') or check existing database users. " .
+                        "CyberPanel message: {$errorMsg}"
+                    );
+                } else {
+                    $this->logger->error("Database creation failed for '{$domainName}': {$errorMsg}");
+                }
+
+                return false;
+            }
+
+            return true;
         } catch (\Exception $e) {
-            // Log the exception for debugging
-            $this->logger->error('Database creation failed: ' . $e->getMessage());
+            $errorMsg = $e->getMessage();
+            $this->logger->error("Database creation failed for '{$domainName}': {$errorMsg}");
 
             return false;
         }
@@ -733,6 +787,11 @@ EOF',
 
         // Sanitize the domain name to match the created database name
         $dbName = Helper\sanitize_domain_for_database($domainName, $username);
+
+        // CyberPanel enforces a 32-character limit for database names. Also remove trailing underscores.
+        if (strlen($dbName) > 32) {
+            $dbName = rtrim(substr($dbName, 0, 32), '_');
+        }
 
         try {
             return $cyber->deleteDatabase($dbName);
@@ -763,6 +822,11 @@ EOF',
 
         // Sanitize the domain name for database compatibility
         $database = Helper\sanitize_domain_for_database($domainName, $username);
+
+        // CyberPanel enforces a 32-character limit for database names. Also remove trailing underscores.
+        if (strlen($database) > 32) {
+            $database = rtrim(substr($database, 0, 32), '_');
+        }
 
         // Construct the command to grant remote access
         $grantCommand = sprintf(
@@ -972,7 +1036,7 @@ EOF',
      * @param NamecheapApi|null $namecheapApi Optional injected NamecheapApi instance. For testing.
      * @param DomainsDns|null   $domainsDns   Optional injected DomainsDns instance. For testing.
      *
-     * @return string|array|bool Returns the API response.
+     * @return string|array|bool Returns the API response on success, or false on error.
      */
     public function updateNameserversNamecheap(
         string $domain,
@@ -1009,22 +1073,34 @@ EOF',
         $response = $domainsDns->setCustom($sld, $tld, $nameserversString);
 
         // Check for errors in the API response
+        if ($response === false) {
+            $this->logger->error("Error updating nameservers for {$domain}: API call failed");
+
+            return false;
+        }
+
         if (is_string($response) || is_array($response)) {
             // Decode the response if it's a string
             $decodedResponse = is_string($response) ? json_decode($response, true) : $response;
+
+            // Check if the API returned an error
             if (isset($decodedResponse['ApiResponse']['Errors']['Error']) || ($decodedResponse['ApiResponse']['_Status'] ?? '') === 'ERROR') {
                 $errorMessage = $decodedResponse['ApiResponse']['Errors']['Error']['__text'] ?? 'Unknown error';
                 $this->logger->error("Error updating nameservers for {$domain}: {$errorMessage}");
-            } else {
-                $this->logger->info("Successfully updated nameservers for {$domain}");
+
+                return false;
             }
-        } elseif ($response === false) {
-            $this->logger->error("Error updating nameservers for {$domain}: API call failed");
-        } else {
+
+            // Success - log and return response
             $this->logger->info("Successfully updated nameservers for {$domain}");
+
+            return $response;
         }
 
-        return $response;
+        // Unexpected response type - log warning and return false
+        $this->logger->warning("Unexpected response type for {$domain}: " . gettype($response));
+
+        return false;
     }
 
     /**
@@ -1091,13 +1167,28 @@ EOF',
     /**
      * Sets up a website on CyberPanel.
      *
+     * This method performs a complete website setup including:
+     * - DNS configuration
+     * - CyberPanel user creation (if needed)
+     * - Website creation
+     * - HTTPS redirect configuration
+     * - SSL certificate issuance
+     * - Database creation
+     * - Remote database access
+     * - SSH password configuration
+     * - Symbolic links enablement
+     *
+     * Note: The username parameter is used as the database username. CyberPanel requires unique
+     * database usernames per website. If you're setting up multiple websites, use different
+     * usernames for each (e.g., 'admin', 'admin2', 'admin3').
+     *
      * @param string      $domainName    The domain name of the website to setup.
      * @param bool        $debug         Whether to output debug information.
      * @param string      $websiteEmail  The email address of the website owner.
      * @param string      $firstName     The first name of the website owner.
      * @param string      $lastName      The last name of the website owner.
      * @param string      $userEmail     The email address of the website owner.
-     * @param string      $username      The username of the website owner.
+     * @param string      $username      The username of the website owner. Must be unique per website for database creation.
      * @param string|null $password      The password for the website owner.
      * @param int         $websitesLimit The maximum number of websites the user can have.
      * @param string      $package       The package to use for the website.
@@ -1744,7 +1835,7 @@ EOF',
         // Ensure SSH connection is established
         $this->verifyConnectionSsh();
 
-        $pipFile = '/usr/local/requirments.txt';
+        $pipFile = '/usr/local/CyberCP/requirments.txt';
 
         try {
             // Store the original timeout
@@ -1781,7 +1872,7 @@ EOF',
                 } else {
                     $this->logger->info('Installing pip...');
 
-                    if (!$this->executeCommand("pip install -r $pipFile --ignore-installed")) {
+                    if (!$this->executeCommand("pip install -r $pipFile --ignore-installed --break-system-packages")) {
                         $this->logger->error('Failed to install pip');
 
                         return false;
@@ -1817,24 +1908,18 @@ EOF',
     }
 
     /**
-     * Installs and configures multiple PHP versions with extensions.
+     * Installs system utility packages.
      *
-     * This method:
-     * 1. Adds the Ondřej Surý PPA for PHP
-     * 2. Installs PHP 8.2 and 8.3 core packages
-     * 3. Installs/upgrades specified extensions for PHP 7.4-8.3
-     * 4. Optionally sets a default PHP version
+     * This method installs the system utilities specified in the $systemUtilities property.
      *
-     * @param bool        $updateApt         Whether to run apt-get update before installation
-     * @param int         $timeout           SSH timeout in seconds (default: 1800 = 30 minutes)
-     * @param string|null $defaultPhpVersion PHP version to set as default (e.g., '8.3')
+     * @param bool $updateApt Whether to run apt-get update before installation
+     * @param int  $timeout   SSH timeout in seconds (default: 600 = 10 minutes)
      *
-     * @throws \InvalidArgumentException If an invalid PHP version is provided
-     * @throws \Exception                If SSH connection fails or commands cannot be executed
+     * @throws \Exception If SSH connection fails or commands cannot be executed
      *
      * @return bool Returns true if all operations were successful, false otherwise
      */
-    public function installPhpVersionsAndExtensions(bool $updateApt = true, int $timeout = 1800, ?string $defaultPhpVersion = '8.3'): bool
+    public function installSystemUtilities(bool $updateApt = true, int $timeout = 600): bool
     {
         // Ensure SSH connection is established
         $this->verifyConnectionSsh();
@@ -1843,6 +1928,79 @@ EOF',
             // Store and set timeout
             $originalTimeout = $this->sshConnection->getTimeout();
             $this->sshConnection->setTimeout($timeout);
+
+            // Update package lists if requested
+            if ($updateApt) {
+                $this->logger->info('Updating package lists...');
+                if (!$this->executeCommand('apt-get update')) {
+                    $this->logger->error('Failed to update package lists');
+
+                    return false;
+                }
+            }
+
+            // Install system utilities
+            if (!empty($this->systemUtilities)) {
+                $packages = implode(' ', $this->systemUtilities);
+                $this->logger->info("Installing system utilities: {$packages}");
+
+                if (!$this->executeCommand("apt-get install -y {$packages}")) {
+                    $this->logger->error('Failed to install system utilities');
+
+                    return false;
+                }
+
+                $this->logger->info('System utilities installed successfully');
+            } else {
+                $this->logger->info('No system utilities to install');
+            }
+
+            // Restore original timeout
+            $this->sshConnection->setTimeout($originalTimeout);
+
+            return true;
+        } catch (\Exception $e) {
+            $this->logger->error('Exception during system utilities installation: ' . $e->getMessage());
+
+            return false;
+        }
+    }
+
+    /**
+     * Installs and configures multiple PHP versions with extensions.
+     *
+     * This method:
+     * 1. Adds the Ondřej Surý PPA for PHP
+     * 2. Installs PHP 8.2, 8.3, and 8.4 core packages
+     * 3. Installs/upgrades specified extensions for PHP 7.4-8.4
+     * 4. Optionally sets a default PHP version
+     *
+     * @param bool        $updateApt         Whether to run apt-get update before installation
+     * @param int         $timeout           SSH timeout in seconds (default: 1800 = 30 minutes)
+     * @param string|null $defaultPhpVersion PHP version to set as default (e.g., '8.4')
+     *
+     * @throws \InvalidArgumentException If an invalid PHP version is provided
+     * @throws \Exception                If SSH connection fails or commands cannot be executed
+     *
+     * @return bool Returns true if all operations were successful, false otherwise
+     */
+    public function installPhpVersionsAndExtensions(bool $updateApt = true, int $timeout = 1800, ?string $defaultPhpVersion = '8.4'): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        try {
+            // Store and set timeout
+            $originalTimeout = $this->sshConnection->getTimeout();
+            $this->sshConnection->setTimeout($timeout);
+
+            // Detect Ubuntu version
+            $ubuntuVersion = null;
+            $versionOutput = $this->sshConnection->exec('lsb_release -rs');
+            if ($versionOutput && preg_match('/^(\d+\.\d+)/', trim($versionOutput), $matches)) {
+                $ubuntuVersion = $matches[1];
+                $this->logger->info("Detected Ubuntu version: $ubuntuVersion");
+            }
 
             // Define a shared list of extensions (without json)
             $sharedExtensions = [
@@ -1876,7 +2034,20 @@ EOF',
                 '8.1' => $sharedExtensions,
                 '8.2' => $sharedExtensions,
                 '8.3' => $sharedExtensions,
+                '8.4' => $sharedExtensions,
             ];
+
+            // Filter out unsupported versions based on Ubuntu version
+            if ($ubuntuVersion && version_compare($ubuntuVersion, '24', '>=')) {
+                // PHP 7.4 and 8.0 are not available on Ubuntu 24.x+
+                $unsupportedVersions = ['7.4', '8.0'];
+                foreach ($unsupportedVersions as $unsupportedVersion) {
+                    if (isset($phpExtensions[$unsupportedVersion])) {
+                        unset($phpExtensions[$unsupportedVersion]);
+                        $this->logger->warning("PHP $unsupportedVersion is not available on Ubuntu $ubuntuVersion and will be skipped");
+                    }
+                }
+            }
 
             // Validate default PHP version if provided
             if ($defaultPhpVersion !== null && !array_key_exists($defaultPhpVersion, $phpExtensions)) {
@@ -1899,9 +2070,9 @@ EOF',
                 }
             }
 
-            // Install PHP 8.2 and 8.3 core
-            $this->logger->info('Installing PHP 8.2 and 8.3 core packages...');
-            if (!$this->executeCommand('sudo apt-get install -y php8.2 php8.3')) {
+            // Install PHP 8.2, 8.3, and 8.4 core
+            $this->logger->info('Installing PHP 8.2, 8.3, and 8.4 core packages...');
+            if (!$this->executeCommand('sudo apt-get install -y php8.2 php8.3 php8.4')) {
                 return false;
             }
 
@@ -2070,7 +2241,7 @@ EOF',
      *
      * @param bool       $updateApt Whether to run apt-get update before installation
      * @param int        $timeout   SSH timeout in seconds (default: 1800 = 30 minutes)
-     * @param array|null $versions  Array of PHP versions to install (e.g., ['7.4', '8.3'])
+     * @param array|null $versions  Array of PHP versions to install (e.g., ['7.4', '8.4'])
      *                              If null, installs all supported versions
      *
      * @throws \InvalidArgumentException If an invalid PHP version is provided
@@ -2087,6 +2258,14 @@ EOF',
             // Store and set timeout
             $originalTimeout = $this->sshConnection->getTimeout();
             $this->sshConnection->setTimeout($timeout);
+
+            // Detect Ubuntu version
+            $ubuntuVersion = null;
+            $versionOutput = $this->sshConnection->exec('lsb_release -rs');
+            if ($versionOutput && preg_match('/^(\d+\.\d+)/', trim($versionOutput), $matches)) {
+                $ubuntuVersion = $matches[1];
+                $this->logger->info("Detected Ubuntu version: $ubuntuVersion");
+            }
 
             // Define supported PHP versions and their extensions
             $supportedVersions = [
@@ -2225,7 +2404,46 @@ EOF',
                     'sybase',
                     'tidy',
                 ],
+                '8.4' => [
+                    '',
+                    'apcu',
+                    'common',
+                    'curl',
+                    'dbg',
+                    'dev',
+                    'igbinary',
+                    'imagick',
+                    'imap',
+                    'intl',
+                    'ioncube',
+                    'ldap',
+                    'memcached',
+                    'modules-source',
+                    'msgpack',
+                    'mysql',
+                    'opcache',
+                    'pear',
+                    'pgsql',
+                    'pspell',
+                    'redis',
+                    'snmp',
+                    'sqlite3',
+                    'sybase',
+                    'tidy',
+                ],
             ];
+
+            // Filter out unsupported versions based on Ubuntu version
+            if ($ubuntuVersion && version_compare($ubuntuVersion, '24', '>=')) {
+                // PHP 7.4 and 8.0 are not available on Ubuntu 24.x+
+                $unsupportedVersions = ['7.4', '8.0'];
+                foreach ($unsupportedVersions as $unsupportedVersion) {
+                    if (isset($supportedVersions[$unsupportedVersion])) {
+                        unset($supportedVersions[$unsupportedVersion]);
+                        $this->logger->warning("LiteSpeed PHP $unsupportedVersion is not available on Ubuntu $ubuntuVersion and will be skipped");
+                    }
+                }
+            }
 
             // If no versions specified, install all supported versions
             $versions = $versions ?? array_keys($supportedVersions);
@@ -2292,7 +2510,7 @@ EOF',
      * Configures PHP by creating symlinks and optionally enabling display errors.
      *
      * This method:
-     * 1. Creates symlinks for PHP versions 7.4 to 8.3
+     * 1. Creates symlinks for PHP versions 7.4 to 8.4
      * 2. Optionally enables display_errors in php.ini for each version
      *
      * @param bool $enableDisplayErrors Whether to enable display_errors in php.ini
@@ -2313,6 +2531,7 @@ EOF',
             '81' => '8.1',
             '82' => '8.2',
             '83' => '8.3',
+            '84' => '8.4',
         ];
 
         // Create symlinks for each PHP version
@@ -2704,6 +2923,15 @@ EOF',
 
             if (!$this->updateVhostConfsPy()) {
                 $this->logger->error('Failed to update vhostConfs.py');
+
+                return false;
+            }
+
+            // System Utilities Installation
+            $this->logger->info('Installing system utilities...');
+
+            if (!$this->installSystemUtilities($updateApt, $timeout)) {
+                $this->logger->error('Failed to install system utilities');
 
                 return false;
             }

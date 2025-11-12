@@ -168,49 +168,6 @@ class ManagerTest extends TestCase
     }
 
     /**
-     * Enable verbose and debug output with a real logger.
-     *
-     * @return void
-     *
-     * @phpstan-ignore-next-line
-     */
-    private function enableVerboseAndDebug(): void
-    {
-        // Create and set a real logger
-        $reflection     = new \ReflectionClass($this->manager);
-        $loggerProperty = $reflection->getProperty('logger');
-        $loggerProperty->setAccessible(true);
-
-        $realLogger = new \Monolog\Logger('default');
-        $realLogger->pushHandler(new \Monolog\Handler\StreamHandler('php://stdout'));
-        $loggerProperty->setValue($this->manager, $realLogger);
-
-        // Enable verbose and debug modes
-        $this->manager->setVerbose(true);
-        $this->manager->setDebug(true);
-    }
-
-    /**
-     * Disable verbose and debug output and restore mock logger.
-     *
-     * @return void
-     *
-     * @phpstan-ignore-next-line
-     */
-    private function disableVerboseAndDebug(): void
-    {
-        // Restore the mock logger
-        $reflection     = new \ReflectionClass($this->manager);
-        $loggerProperty = $reflection->getProperty('logger');
-        $loggerProperty->setAccessible(true);
-        $loggerProperty->setValue($this->manager, $this->mockLogger);
-
-        // Disable verbose and debug modes
-        $this->manager->setVerbose(false);
-        $this->manager->setDebug(false);
-    }
-
-    /**
      * Test setting verbose mode to true.
      */
     public function testSetVerboseTrue(): void
@@ -280,6 +237,35 @@ class ManagerTest extends TestCase
         $property->setAccessible(true);
         $property->setValue($this->manager, 'test-droplet');
         $this->assertSame('test-droplet', $this->manager->getDropletName());
+    }
+
+    /**
+     * Test setting system utilities.
+     */
+    public function testSetSystemUtilities(): void
+    {
+        $utilities = ['package1', 'package2', 'package3'];
+        $this->manager->setSystemUtilities($utilities);
+
+        $reflection = new \ReflectionClass($this->manager);
+        $property   = $reflection->getProperty('systemUtilities');
+        $property->setAccessible(true);
+        $this->assertSame($utilities, $property->getValue($this->manager));
+    }
+
+    /**
+     * Test getting system utilities.
+     */
+    public function testGetSystemUtilities(): void
+    {
+        $utilities = ['plocate', 'sqlcipher', 'supervisor'];
+
+        $reflection = new \ReflectionClass($this->manager);
+        $property   = $reflection->getProperty('systemUtilities');
+        $property->setAccessible(true);
+        $property->setValue($this->manager, $utilities);
+
+        $this->assertSame($utilities, $this->manager->getSystemUtilities());
     }
 
     /**
@@ -1256,6 +1242,10 @@ class ManagerTest extends TestCase
         $this->cyberLinkMock->method('createDatabase')
             ->willReturn(false);
 
+        // Mock getLastMessage to return an error message
+        $this->cyberLinkMock->method('getLastMessage')
+            ->willReturn('Database creation failed');
+
         // Call createDatabase and check that it returns false
         $result = $this->managerWithCyberLink->createDatabase('example.com', 'testuser', 'password123');
         $this->assertFalse($result);
@@ -1272,6 +1262,32 @@ class ManagerTest extends TestCase
         // Call createDatabase and check that it returns false when an exception is thrown
         $result = $this->managerWithCyberLink->createDatabase('example.com', 'testuser', 'password123');
         $this->assertFalse($result);
+    }
+
+    public function testCreateDatabaseTruncatesLongNames()
+    {
+        $this->setUpWithCyberLink();
+
+        // Use a domain and username that would create a database name longer than 32 characters
+        // informationhub_top_informationhubtop = 36 characters (should be truncated to 32)
+        $domainName = 'informationhub.top';
+        $username   = 'informationhubtop';
+
+        // Expected truncated database name (32 chars max)
+        $expectedDbName = 'informationhub_top_informationhu';
+
+        // Verify the expected database name is exactly 32 characters
+        $this->assertEquals(32, strlen($expectedDbName));
+
+        // Configure the mock to expect the truncated database name
+        $this->cyberLinkMock->expects($this->once())
+            ->method('createDatabase')
+            ->with($domainName, $expectedDbName, $username, 'password123')
+            ->willReturn(true);
+
+        // Call createDatabase
+        $result = $this->managerWithCyberLink->createDatabase($domainName, $username, 'password123');
+        $this->assertTrue($result);
     }
 
     public function testDropDatabaseSuccess()
@@ -1311,6 +1327,28 @@ class ManagerTest extends TestCase
         // Call dropDatabase and check that it returns false when an exception is thrown
         $result = $this->managerWithCyberLink->dropDatabase('example.com', 'testuser');
         $this->assertFalse($result);
+    }
+
+    public function testDropDatabaseTruncatesLongNames()
+    {
+        $this->setUpWithCyberLink();
+
+        // Use a domain and username that would create a database name longer than 32 characters
+        $domainName = 'informationhub.top';
+        $username   = 'informationhubtop';
+
+        // Expected truncated database name (32 chars max)
+        $expectedDbName = 'informationhub_top_informationhu';
+
+        // Configure the mock to expect the truncated database name
+        $this->cyberLinkMock->expects($this->once())
+            ->method('deleteDatabase')
+            ->with($expectedDbName)
+            ->willReturn(true);
+
+        // Call dropDatabase
+        $result = $this->managerWithCyberLink->dropDatabase($domainName, $username);
+        $this->assertTrue($result);
     }
 
     public function testGrantRemoteDatabaseAccessSuccess()
@@ -1385,6 +1423,30 @@ class ManagerTest extends TestCase
 
         // Call the method
         $this->manager->grantRemoteDatabaseAccess('example.com', 'testuser', 'password123');
+    }
+
+    public function testGrantRemoteDatabaseAccessTruncatesLongNames()
+    {
+        // Configure the SSH mock to return true for login
+        $this->sshMock->method('login')->willReturn(true);
+
+        // Use a domain and username that would create a database name longer than 32 characters
+        $domainName = 'informationhub.top';
+        $username   = 'informationhubtop';
+        $password   = 'password123';
+
+        // Expected truncated database name (32 chars max)
+        $expectedDbName = 'informationhub_top_informationhu';
+
+        // Set up the expectation to check that the truncated database name is used
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->with($this->stringContains(Helper\escapeshellarg_linux($expectedDbName)))
+            ->willReturn('');
+
+        // Call the method
+        $result = $this->manager->grantRemoteDatabaseAccess($domainName, $username, $password);
+        $this->assertTrue($result);
     }
 
     public function testSetUserPasswordSshSuccess()
@@ -1718,8 +1780,8 @@ class ManagerTest extends TestCase
         // Run the method with the mocked DomainsDns
         $result = $this->manager->updateNameserversNamecheap('example.com', null, false, $this->mockNamecheapApi, $this->domainsDnsMock);
 
-        // Verify result is the error response
-        $this->assertSame($response, $result);
+        // Verify result is false on error
+        $this->assertFalse($result);
     }
 
     public function testUpdateNameserversNamecheapUsesSandbox()
@@ -3341,6 +3403,138 @@ class ManagerTest extends TestCase
         $this->assertFalse($result);
     }
 
+    /**
+     * Test successful installation of system utilities.
+     */
+    public function testInstallSystemUtilitiesSuccess(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Track timeout calls
+        $this->sshMock->expects($this->exactly(2))
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) {
+                return true;
+            });
+
+        // Track command executions
+        $expectedCommands = [
+            'apt-get update',
+            'apt-get install -y plocate sqlcipher supervisor',
+        ];
+
+        $commandIndex = 0;
+        $this->sshMock->expects($this->exactly(count($expectedCommands)))
+            ->method('exec')
+            ->willReturnCallback(function ($command) use (&$commandIndex, $expectedCommands) {
+                $this->assertStringContainsString($expectedCommands[$commandIndex], $command);
+                $commandIndex++;
+
+                return 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
+            });
+
+        $result = $this->manager->installSystemUtilities(true, 600);
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test system utilities installation without apt update.
+     */
+    public function testInstallSystemUtilitiesWithoutAptUpdate(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Track timeout calls
+        $this->sshMock->expects($this->exactly(2))
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) {
+                return true;
+            });
+
+        // Only expect the install command, not apt-get update
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturnCallback(function ($command) {
+                $this->assertStringContainsString('apt-get install -y plocate sqlcipher supervisor', $command);
+
+                return 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
+            });
+
+        $result = $this->manager->installSystemUtilities(false, 600);
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test system utilities installation with empty utilities array.
+     */
+    public function testInstallSystemUtilitiesWithEmptyArray(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Set empty utilities array
+        $this->manager->setSystemUtilities([]);
+
+        // Track timeout calls
+        $this->sshMock->expects($this->exactly(2))
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) {
+                return true;
+            });
+
+        // Expect apt-get update but no install command
+        $this->sshMock->expects($this->once())
+            ->method('exec')
+            ->willReturnCallback(function ($command) {
+                $this->assertStringContainsString('apt-get update', $command);
+
+                return 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
+            });
+
+        $result = $this->manager->installSystemUtilities(true, 600);
+        $this->assertTrue($result);
+    }
+
+    /**
+     * Test system utilities installation command failure.
+     */
+    public function testInstallSystemUtilitiesCommandFailure(): void
+    {
+        // Configure the SSH mock
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('getTimeout')->willReturn(60);
+
+        // Track timeout calls - only 1 call because method returns early on failure
+        $this->sshMock->expects($this->once())
+            ->method('setTimeout')
+            ->willReturnCallback(function ($timeout) {
+                return true;
+            });
+
+        // Simulate command failure
+        $callCount = 0;
+        $this->sshMock->expects($this->exactly(2))
+            ->method('exec')
+            ->willReturnCallback(function ($command) use (&$callCount) {
+                $callCount++;
+                if ($callCount === 1) {
+                    // apt-get update succeeds
+                    return 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
+                }
+
+                // apt-get install fails
+                return 'Command failed<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>';
+            });
+
+        $result = $this->manager->installSystemUtilities(true, 600);
+        $this->assertFalse($result);
+    }
+
     public function testInstallPhpVersionsAndExtensionsSuccess(): void
     {
         // Configure the SSH mock
@@ -3359,9 +3553,10 @@ class ManagerTest extends TestCase
 
         // Track command executions with proper exit code format
         $expectedCommands = [
+            'lsb_release -rs',
             'sudo add-apt-repository -y ppa:ondrej/php',
             'sudo apt-get update',
-            'sudo apt-get install -y php8.2 php8.3',
+            'sudo apt-get install -y php8.2 php8.3 php8.4',
             // PHP versions extensions
             [
                 'type'       => 'php7.4',
@@ -3494,20 +3689,53 @@ class ManagerTest extends TestCase
                     'zip',
                 ],
             ],
-            'sudo update-alternatives --install /usr/bin/php php /usr/bin/php8.3 1',
-            'sudo update-alternatives --set php /usr/bin/php8.3',
+            [
+                'type'       => 'php8.4',
+                'extensions' => [
+                    'bcmath',
+                    'cli',
+                    'common',
+                    'ctype',
+                    'curl',
+                    'dev',
+                    'dom',
+                    'exif',
+                    'fileinfo',
+                    'gd',
+                    'iconv',
+                    'intl',
+                    'mbstring',
+                    'mysql',
+                    'opcache',
+                    'pdo',
+                    'redis',
+                    'sqlite3',
+                    'tokenizer',
+                    'xml',
+                    'zip',
+                ],
+            ],
+            'sudo update-alternatives --install /usr/bin/php php /usr/bin/php8.4 1',
+            'sudo update-alternatives --set php /usr/bin/php8.4',
         ];
 
         $commandIndex = 0;
         $this->sshMock->expects($this->exactly(count($expectedCommands)))
             ->method('exec')
             ->willReturnCallback(function ($command) use (&$commandIndex, $expectedCommands) {
+                // Handle Ubuntu version detection command
+                if ($command === 'lsb_release -rs') {
+                    $commandIndex++;
+
+                    return '22.04'; // Simulate Ubuntu 22.04 (supports all PHP versions)
+                }
+
                 // Remove DEBIAN_FRONTEND prefix and exit code capture suffix
                 $cleanCommand = preg_replace('/^DEBIAN_FRONTEND=noninteractive /', '', $command);
                 $cleanCommand = preg_replace('/ 2>&1; echo "<<<EXITCODE_DELIMITER>>>\$\?<<<EXITCODE_END>>>"$/', '', $cleanCommand);
 
                 // Handle PHP extension commands specially
-                if ($commandIndex >= 3 && $commandIndex <= 7) {
+                if ($commandIndex >= 4 && $commandIndex <= 9) {
                     if (strpos($cleanCommand, 'sudo apt-get install -y') === 0) {
                         $phpVersion         = $expectedCommands[$commandIndex]['type'];
                         $expectedExtensions = $expectedCommands[$commandIndex]['extensions'];
@@ -3536,7 +3764,7 @@ class ManagerTest extends TestCase
                 return 'Success<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>';
             });
 
-        $result = $this->manager->installPhpVersionsAndExtensions(true, 1800, '8.3');
+        $result = $this->manager->installPhpVersionsAndExtensions(true, 1800, '8.4');
         $this->assertTrue($result);
     }
 
@@ -3551,9 +3779,9 @@ class ManagerTest extends TestCase
 
         // Now test the invalid version
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('Invalid PHP version: 8.4');
+        $this->expectExceptionMessage('Invalid PHP version: 8.5');
 
-        $this->manager->installPhpVersionsAndExtensions(true, 1800, '8.4');
+        $this->manager->installPhpVersionsAndExtensions(true, 1800, '8.5');
     }
 
     public function testInstallPhpVersionsAndExtensionsCommandFailure(): void
@@ -3572,10 +3800,18 @@ class ManagerTest extends TestCase
                 return true;
             });
 
-        // Simulate a command failure
-        $this->sshMock->expects($this->once())
+        // Simulate Ubuntu version detection, then command failure
+        $callCount = 0;
+        $this->sshMock->expects($this->exactly(2))
             ->method('exec')
-            ->willReturn('Command failed<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>');
+            ->willReturnCallback(function ($command) use (&$callCount) {
+                $callCount++;
+                if ($callCount === 1 && $command === 'lsb_release -rs') {
+                    return '22.04'; // Ubuntu version detection
+                }
+
+                return 'Command failed<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>';
+            });
 
         // Expect error to be logged
         $this->mockLogger->expects($this->once())
@@ -3585,7 +3821,7 @@ class ManagerTest extends TestCase
                 $this->arrayHasKey('output')
             );
 
-        $result = $this->manager->installPhpVersionsAndExtensions(true, 1800, '8.3');
+        $result = $this->manager->installPhpVersionsAndExtensions(true, 1800, '8.4');
         $this->assertFalse($result);
     }
 
@@ -3622,7 +3858,7 @@ class ManagerTest extends TestCase
             ->with($this->stringContains('Error during PHP installation'));
 
         $customTimeout = 2400;
-        $result        = $this->manager->installPhpVersionsAndExtensions(true, $customTimeout, '8.3');
+        $result        = $this->manager->installPhpVersionsAndExtensions(true, $customTimeout, '8.4');
 
         $this->assertFalse($result);
         $this->assertEquals($customTimeout, $timeoutSequence[0], 'Custom timeout not set correctly');
@@ -3650,6 +3886,7 @@ class ManagerTest extends TestCase
 
         // Track command executions
         $expectedCommands = [
+            'lsb_release -rs',
             'apt-get update',
             // PHP 7.4 packages
             'apt-get install -y lsphp74 lsphp74-apcu lsphp74-common lsphp74-curl lsphp74-dbg ' .
@@ -3681,12 +3918,25 @@ class ManagerTest extends TestCase
                 'lsphp83-ldap lsphp83-memcached lsphp83-modules-source lsphp83-msgpack lsphp83-mysql ' .
                 'lsphp83-opcache lsphp83-pear lsphp83-pgsql lsphp83-pspell lsphp83-redis lsphp83-snmp ' .
                 'lsphp83-sqlite3 lsphp83-sybase lsphp83-tidy',
+            // PHP 8.4 packages
+            'apt-get install -y lsphp84 lsphp84-apcu lsphp84-common lsphp84-curl lsphp84-dbg ' .
+                'lsphp84-dev lsphp84-igbinary lsphp84-imagick lsphp84-imap lsphp84-intl lsphp84-ioncube ' .
+                'lsphp84-ldap lsphp84-memcached lsphp84-modules-source lsphp84-msgpack lsphp84-mysql ' .
+                'lsphp84-opcache lsphp84-pear lsphp84-pgsql lsphp84-pspell lsphp84-redis lsphp84-snmp ' .
+                'lsphp84-sqlite3 lsphp84-sybase lsphp84-tidy',
         ];
 
         $commandIndex = 0;
         $this->sshMock->expects($this->exactly(count($expectedCommands)))
             ->method('exec')
             ->willReturnCallback(function ($command) use (&$commandIndex, $expectedCommands) {
+                // Handle Ubuntu version detection command
+                if ($command === 'lsb_release -rs') {
+                    $commandIndex++;
+
+                    return '22.04'; // Simulate Ubuntu 22.04 (supports all PHP versions)
+                }
+
                 // Remove DEBIAN_FRONTEND prefix and exit code capture suffix
                 $cleanCommand = preg_replace('/^DEBIAN_FRONTEND=noninteractive /', '', $command);
                 $cleanCommand = preg_replace('/ 2>&1; echo "<<<EXITCODE_DELIMITER>>>\$\?<<<EXITCODE_END>>>"$/', '', $cleanCommand);
@@ -3720,9 +3970,9 @@ class ManagerTest extends TestCase
 
         // Expect an exception for invalid version
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('Invalid PHP version: 8.4');
+        $this->expectExceptionMessage('Invalid PHP version: 8.5');
 
-        $this->manager->installLiteSpeedPhpVersionsAndExtensions(true, 1800, ['8.4']);
+        $this->manager->installLiteSpeedPhpVersionsAndExtensions(true, 1800, ['8.5']);
     }
 
     /**
@@ -3741,10 +3991,18 @@ class ManagerTest extends TestCase
                 return true;
             });
 
-        // Simulate a command failure
-        $this->sshMock->expects($this->once())
+        // Simulate Ubuntu version detection, then command failure
+        $callCount = 0;
+        $this->sshMock->expects($this->exactly(2))
             ->method('exec')
-            ->willReturn('Command failed<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>');
+            ->willReturnCallback(function ($command) use (&$callCount) {
+                $callCount++;
+                if ($callCount === 1 && $command === 'lsb_release -rs') {
+                    return '22.04'; // Ubuntu version detection
+                }
+
+                return 'Command failed<<<EXITCODE_DELIMITER>>>1<<<EXITCODE_END>>>';
+            });
 
         // Expect error to be logged
         $this->mockLogger->expects($this->once())
@@ -3763,10 +4021,10 @@ class ManagerTest extends TestCase
         $this->sshMock->method('login')->willReturn(true);
         $this->manager->setSshConnection($this->sshMock);
 
-        // For 5 PHP versions (7.4, 8.0, 8.1, 8.2, 8.3), we expect:
-        // - 2 calls per version for symlink creation (10 total)
-        // - 5 calls per version for display_errors modification (25 total)
-        $this->sshMock->expects($this->exactly(35))
+        // For 6 PHP versions (7.4, 8.0, 8.1, 8.2, 8.3, 8.4), we expect:
+        // - 2 calls per version for symlink creation (12 total)
+        // - 5 calls per version for display_errors modification (30 total)
+        $this->sshMock->expects($this->exactly(42))
             ->method('exec')
             ->willReturnOnConsecutiveCalls(
                 // PHP 7.4 symlink
@@ -3786,6 +4044,10 @@ class ManagerTest extends TestCase
                 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
 
                 // PHP 8.3 symlink
+                '',  // test -e check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
+
+                // PHP 8.4 symlink
                 '',  // test -e check
                 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // ln -s
 
@@ -3822,6 +4084,13 @@ class ManagerTest extends TestCase
                 'display_errors = Off', // grep Off check
                 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
                 'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
+                'display_errors = On',  // grep verify
+
+                // PHP 8.4 display_errors
+                '',  // grep On check
+                'display_errors = Off', // grep Off check
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // cp backup
+                'Command output<<<EXITCODE_DELIMITER>>>0<<<EXITCODE_END>>>', // sed replace
                 'display_errors = On'   // grep verify
             );
 
@@ -3838,7 +4107,7 @@ class ManagerTest extends TestCase
         $this->manager->setSshConnection($this->sshMock);
 
         // Simulate symlink creation failure
-        $this->sshMock->expects($this->exactly(10))  // 2 calls per version (test -e and ln -s)
+        $this->sshMock->expects($this->exactly(12))  // 2 calls per version (test -e and ln -s)
             ->method('exec')
             ->willReturnCallback(function ($command) {
                 if (str_contains($command, 'test -e')) {
@@ -3860,10 +4129,12 @@ class ManagerTest extends TestCase
             'Failed to create symlink for PHP 8.2',
             'Command failed with exit code 1: ln -s',
             'Failed to create symlink for PHP 8.3',
+            'Command failed with exit code 1: ln -s',
+            'Failed to create symlink for PHP 8.4',
         ];
 
         $errorIndex = 0;
-        $this->mockLogger->expects($this->exactly(10))
+        $this->mockLogger->expects($this->exactly(12))
             ->method('error')
             ->willReturnCallback(function ($message) use (&$errorIndex, $expectedErrors) {
                 $this->assertStringContainsString($expectedErrors[$errorIndex], $message);
@@ -4327,6 +4598,7 @@ class ManagerTest extends TestCase
                 'setupAliasesAndFunctions',
                 'configureScreen',
                 'updateNanoCtrlFSearchBinding',
+                'installSystemUtilities',
                 'installPhpVersionsAndExtensions',
                 'installLiteSpeedPhpVersionsAndExtensions',
                 'configurePhp',
@@ -4345,6 +4617,7 @@ class ManagerTest extends TestCase
         $managerMock->method('setupAliasesAndFunctions')->willReturn(true);
         $managerMock->method('configureScreen')->willReturn(true);
         $managerMock->method('updateNanoCtrlFSearchBinding')->willReturn(true);
+        $managerMock->method('installSystemUtilities')->willReturn(true);
         $managerMock->method('installPhpVersionsAndExtensions')->willReturn(true);
         $managerMock->method('installLiteSpeedPhpVersionsAndExtensions')->willReturn(true);
         $managerMock->method('configurePhp')->willReturn(true);
@@ -4413,6 +4686,7 @@ class ManagerTest extends TestCase
                 'enableCyberPanelApiAccess',
                 'updateVhostPy',
                 'updateVhostConfsPy',
+                'installSystemUtilities',
                 'installPhpVersionsAndExtensions',
                 'installLiteSpeedPhpVersionsAndExtensions',
                 'configurePhp',
@@ -4431,6 +4705,7 @@ class ManagerTest extends TestCase
         $managerMock->method('enableCyberPanelApiAccess')->willReturn(true);
         $managerMock->method('updateVhostPy')->willReturn(true);
         $managerMock->method('updateVhostConfsPy')->willReturn(true);
+        $managerMock->method('installSystemUtilities')->willReturn(true);
         $managerMock->method('installPhpVersionsAndExtensions')->willReturn(false); // Simulate failure
 
         // Expect error to be logged
@@ -4473,6 +4748,7 @@ class ManagerTest extends TestCase
                 'setupAliasesAndFunctions',
                 'configureScreen',
                 'updateNanoCtrlFSearchBinding',
+                'installSystemUtilities',
                 'installPhpVersionsAndExtensions',
                 'installLiteSpeedPhpVersionsAndExtensions',
                 'configurePhp',
@@ -4491,6 +4767,7 @@ class ManagerTest extends TestCase
         $managerMock->method('setupAliasesAndFunctions')->willReturn(true);
         $managerMock->method('configureScreen')->willReturn(true);
         $managerMock->method('updateNanoCtrlFSearchBinding')->willReturn(true);
+        $managerMock->method('installSystemUtilities')->willReturn(true);
         $managerMock->method('installPhpVersionsAndExtensions')->willReturn(true);
         $managerMock->method('installLiteSpeedPhpVersionsAndExtensions')->willReturn(true);
         $managerMock->method('configurePhp')->willReturn(true);
