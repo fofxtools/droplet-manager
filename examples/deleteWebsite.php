@@ -16,7 +16,7 @@ echo "Deleting website: {$domainName}\n";
 $result = $manager->deleteWebsite($domainName);
 
 if ($result) {
-    echo "✅ Website deleted successfully!\n";
+    echo "Website deleted successfully.\n";
 } else {
-    echo "❌ Failed to delete website\n";
+    echo "Failed to delete website\n";
 }

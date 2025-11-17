@@ -143,6 +143,8 @@ $manager->setupWebsite(
 
 See [`examples/deleteWebsite.php`](../examples/deleteWebsite.php). This method will delete a website.
 
+If you have just created a website. You may need to wait a minute before being able to delete it.
+
 ```php
 // Delete a website
 $manager->deleteWebsite('examplesite.com');
@@ -153,14 +155,17 @@ $manager->deleteWebsite('examplesite.com');
 ```php
 // List websites
 $websites = $manager->getWebsites();
+echo "Websites:\n";
 print_r($websites);
 
 // List users
 $users = $manager->getUsers();
+echo "Users:\n";
 print_r($users);
 
 // List databases for each website
 foreach ($websites as $website) {
+    echo "Databases for {$website}:\n";
     $databases = $manager->getDatabases($website);
     print_r($databases);
 }

@@ -25,6 +25,7 @@ return [
         'cyberpanel_admin'    => 'admin',
         'cyberpanel_password' => '',
     ],
+    // Namecheap API requires whitelisting the IP of the server this script is running on
     'namecheap' => [
         'username' => '',
         'token'    => '',
