@@ -924,6 +924,72 @@ EOF',
     }
 
     /**
+     * Enables shell access for a user by changing their shell to /bin/bash.
+     *
+     * This method uses the usermod command to change the user's shell from a restricted
+     * shell (like /bin/false or /sbin/nologin) to /bin/bash, enabling full shell access.
+     *
+     * @param string $domain       The domain name associated with the user.
+     * @param bool   $verifyChange Whether to verify the shell change after execution. Defaults to true.
+     *
+     * @return bool Returns true if the shell change command was executed successfully,
+     *              even if verification fails. Returns false if there were errors in
+     *              connection, username retrieval, or shell change execution.
+     */
+    public function enableShellAccess(string $domain, bool $verifyChange = true): bool
+    {
+        // Ensure SSH connection is established
+        $this->verifyConnectionSsh();
+
+        $username = $this->getLinuxUserForDomain($domain);
+        if (!$username) {
+            $this->logger->error("Failed to retrieve username for domain: $domain");
+
+            return false;
+        }
+
+        // Change user shell to /bin/bash
+        $usermodCommand = sprintf(
+            'sudo usermod -s /bin/bash %s',
+            Helper\escapeshellarg_linux($username)
+        );
+        $output = $this->execSsh($usermodCommand);
+
+        if ($output === false) {
+            $this->logger->error("SSH execution failed for usermod command for user: $username");
+
+            return false;
+        }
+
+        if ($output !== '') {
+            $this->logger->error("Usermod command failed for user: $username. Output: $output");
+
+            return false;
+        }
+
+        $this->logger->info("Shell change command executed for user: $username");
+
+        // Verify shell change
+        if ($verifyChange) {
+            $verifyCommand = 'getent passwd ' . Helper\escapeshellarg_linux($username);
+            $verifyOutput  = $this->execSsh($verifyCommand);
+
+            // Note: We're still returning true here because the shell was likely changed
+            if ($verifyOutput === false) {
+                $this->logger->warning("SSH execution failed for shell verification command for user: $username");
+            } elseif (strpos($verifyOutput, ':/bin/bash') === false) {
+                $this->logger->warning(
+                    "Shell change could not be verified for user: $username. Output: $verifyOutput"
+                );
+            } else {
+                $this->logger->info("Shell successfully changed to /bin/bash for user: $username");
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Enables symbolic link usage for a given domain by updating the server configuration.
      *
      * This method connects to the server via SSH and modifies the httpd_config.conf
@@ -1176,23 +1242,25 @@ EOF',
      * - Database creation
      * - Remote database access
      * - SSH password configuration
+     * - Shell access enablement (optional)
      * - Symbolic links enablement
      *
      * Note: The username parameter is used as the database username. CyberPanel requires unique
      * database usernames per website. If you're setting up multiple websites, use different
      * usernames for each (e.g., 'admin', 'admin2', 'admin3').
      *
-     * @param string      $domainName    The domain name of the website to setup.
-     * @param bool        $debug         Whether to output debug information.
-     * @param string      $websiteEmail  The email address of the website owner.
-     * @param string      $firstName     The first name of the website owner.
-     * @param string      $lastName      The last name of the website owner.
-     * @param string      $userEmail     The email address of the website owner.
-     * @param string      $username      The username of the website owner. Must be unique per website for database creation.
-     * @param string|null $password      The password for the website owner.
-     * @param int         $websitesLimit The maximum number of websites the user can have.
-     * @param string      $package       The package to use for the website.
-     * @param string      $phpVersion    The PHP version to use for the website.
+     * @param string      $domainName        The domain name of the website to setup.
+     * @param bool        $debug             Whether to output debug information.
+     * @param string      $websiteEmail      The email address of the website owner.
+     * @param string      $firstName         The first name of the website owner.
+     * @param string      $lastName          The last name of the website owner.
+     * @param string      $userEmail         The email address of the website owner.
+     * @param string      $username          The username of the website owner. Must be unique per website for database creation.
+     * @param string|null $password          The password for the website owner.
+     * @param int         $websitesLimit     The maximum number of websites the user can have.
+     * @param string      $package           The package to use for the website.
+     * @param string      $phpVersion        The PHP version to use for the website.
+     * @param bool        $enableShellAccess Whether to enable shell access for the user. Defaults to false.
      *
      * @return void
      */
@@ -1207,7 +1275,8 @@ EOF',
         ?string $password = null,
         int $websitesLimit = 0,
         string $package = CyberLink::package,
-        string $phpVersion = CyberLink::phpVersion
+        string $phpVersion = CyberLink::phpVersion,
+        bool $enableShellAccess = false
     ): void {
         $websiteOwner = $username;
 
@@ -1305,6 +1374,16 @@ EOF',
             $this->logger->info("User {$username} SSH password set for {$domainName}");
         } else {
             $this->logger->error("Failed to set {$username} SSH password for {$domainName}");
+        }
+
+        // Enable Shell Access
+        if ($enableShellAccess) {
+            $this->logger->info("Enabling shell access for user {$username} on domain {$domainName}");
+            if ($this->enableShellAccess($domainName)) {
+                $this->logger->info("Shell access enabled for user {$username} on domain {$domainName}");
+            } else {
+                $this->logger->error("Failed to enable shell access for user {$username} on domain {$domainName}");
+            }
         }
 
         // Unrestrain Symbolic Links

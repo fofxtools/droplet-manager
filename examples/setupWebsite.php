@@ -17,13 +17,14 @@ $userEmail    = $websiteEmail;
 // Auto-generate username from domain
 $username = substr(preg_replace('/[^a-z0-9]/', '', strtolower($domainName)), 0, 16);
 
-$password      = 'Qc!ftl2gJ7u';
-$websitesLimit = 0;
+$password          = 'Qc!ftl2gJ7u';
+$websitesLimit     = 0;
+$enableShellAccess = true;
 
 // Call the setupWebsite method
 try {
     $debug = true;
-    $manager->setupWebsite($domainName, $debug, $websiteEmail, $firstName, $lastName, $userEmail, $username, $password, $websitesLimit);
+    $manager->setupWebsite($domainName, $debug, $websiteEmail, $firstName, $lastName, $userEmail, $username, $password, $websitesLimit, enableShellAccess: $enableShellAccess);
     echo "Website setup completed successfully!\n";
 } catch (\Exception $e) {
     echo 'An error occurred during website setup: ' . $e->getMessage() . "\n";

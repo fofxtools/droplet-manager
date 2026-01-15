@@ -21,6 +21,7 @@ config.*.php
 /local/
 
 # Storage Folders
+/public/storage
 /storage/
 /uploads/
 
@@ -33,6 +34,7 @@ global_rules.md
 usage_tracking*.json
 
 # IDE and Editor Folders
+/.augment/
 /.claude/
 /.cursor/
 /.fleet/
@@ -55,11 +57,14 @@ usage_tracking*.json
 # Build Folders
 /build/
 /coverage/
+/dist/
 /node_modules/
 /public/build/
-/public/storage
+/public/dist/
 
-# Temporary Files
+# Temporary Files / Backup Files
+*.bak
+*.tmp
 /temp/
 /tmp/
 /temp.php
@@ -111,6 +116,13 @@ venv*/
 
 # Python cache / Bytecode
 __pycache__/
-*.pyc
 *.py[codz]
 *$py.class
+
+# Python tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Python packaging metadata
+*.egg-info/

@@ -107,6 +107,7 @@ class ManagerTest extends TestCase
                 'createDatabase',
                 'grantRemoteDatabaseAccess',
                 'setUserPasswordSsh',
+                'enableShellAccess',
                 'enableSymlinksForDomain',
                 'connectCyberLink',
                 'restartLiteSpeed',
@@ -1549,6 +1550,75 @@ class ManagerTest extends TestCase
 
         // Assert
         $this->assertTrue($result);  // The method still returns true even if verification fails
+    }
+
+    public function testEnableShellAccessSuccess()
+    {
+        // Configure mocks
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(3))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'testuser',  // getLinuxUserForDomain
+                '',          // usermod command (success)
+                'testuser:x:1001:1001::/home/testuser:/bin/bash'  // getent passwd command
+            );
+
+        // Call the method
+        $result = $this->manager->enableShellAccess('example.com');
+
+        // Assert
+        $this->assertTrue($result);
+    }
+
+    public function testEnableShellAccessFailsOnGetLinuxUserForDomain()
+    {
+        // Configure mocks
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->method('exec')
+            ->willReturn('');  // Empty response from getLinuxUserForDomain
+
+        // Call the method
+        $result = $this->manager->enableShellAccess('example.com');
+
+        // Assert
+        $this->assertFalse($result);
+    }
+
+    public function testEnableShellAccessFailsOnUsermodCommand()
+    {
+        // Configure mocks
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(2))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'testuser',  // getLinuxUserForDomain
+                'usermod: user testuser does not exist'  // usermod command (failure)
+            );
+
+        // Call the method
+        $result = $this->manager->enableShellAccess('example.com');
+
+        // Assert
+        $this->assertFalse($result);
+    }
+
+    public function testEnableShellAccessSucceedsWithoutVerification()
+    {
+        // Configure mocks
+        $this->sshMock->method('login')->willReturn(true);
+        $this->sshMock->expects($this->exactly(2))
+            ->method('exec')
+            ->willReturnOnConsecutiveCalls(
+                'testuser',  // getLinuxUserForDomain
+                ''           // usermod command (success)
+            );
+
+        // Call the method with verifyChange set to false
+        $result = $this->manager->enableShellAccess('example.com', false);
+
+        // Assert
+        $this->assertTrue($result);
     }
 
     public function testEnableSymlinksForDomainSuccess(): void

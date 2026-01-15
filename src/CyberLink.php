@@ -432,7 +432,15 @@ EOL;
             var_dump($output);
         }
 
-        return $this->parse($output);
+        // CyberPanel returns the same JSON response whether deletion succeeded or failed:
+        //   {"success": 1, "errorMessage": "None"} in both cases
+        // Also when there is extra response text (e.g. "Removing resource limits for user") before the JSON
+        // parse() can break due to extra curly braces
+        // So instead of `return $this->parse($output);`
+        // Verify actual deletion by checking if the website is gone from the list
+        $websites = $this->listWebsites(true);
+
+        return !in_array($domainName, $websites);
     }
 
     /**
